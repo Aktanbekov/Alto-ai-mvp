@@ -1,6 +1,8 @@
 {
   "dependencies": {
-    "react": "^19.2.0"
+    "framer-motion": "^12.23.22",
+    "react": "^19.2.0",
+    "react-router-dom": "^7.9.3"
   },
   "devDependencies": {
     "@types/react": "^19.2.0"

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -28,6 +30,14 @@ func googleConf() *oauth2.Config {
 		Scopes:       []string{"openid", "email", "profile"},
 		Endpoint:     google.Endpoint,
 	}
+}
+
+// JWT CLAIMS
+type MyClaims struct {
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
+	jwt.RegisteredClaims
 }
 
 // GET /auth/google
@@ -67,8 +77,30 @@ func HandleGoogleCallback(c *gin.Context) {
 	var gu googleUser
 	_ = json.NewDecoder(resp.Body).Decode(&gu)
 
+	// JWT CREATE
+	secret := os.Getenv("JWT_SECRET")
+	claims := MyClaims{
+		Email: gu.Email,
+		Name: gu.Name,
+		Picture: gu.Picture,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7*24*time.Hour)),
+			IssuedAt: jwt.NewNumericDate(time.Now()),
+			Issuer: "altoai_mvp",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not sign jwt"})
+		return
+	}
+
+
+
 	// Issue HttpOnly session cookie (7 days). In production, sign/encode it or use JWT/sessions.
-	c.SetCookie("session", "email="+gu.Email, 7*24*60*60, "/", "", false, true)
+	c.SetCookie("session", signed, 7*24*60*60, "/", "localhost", false, true)
 
 	// Back to frontend
 	c.Redirect(http.StatusFound, "http://localhost:5173/dashboard")

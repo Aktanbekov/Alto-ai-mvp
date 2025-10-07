@@ -22,18 +22,18 @@ func New() *gin.Engine {
 	userH := handlers.NewUserHandler(userSvc)
 
 	// health
-	r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	// AUTH - Google
 	r.GET("/auth/google", auth.HandleGoogleLogin)
 	r.GET("/auth/google/callback", auth.HandleGoogleCallback)
-	r.GET("/me", func(c *gin.Context) {
-		v, err := c.Request.Cookie("session")
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"session": v.Value})
+	r.GET("/me", middleware.JWTAuth(), func(c *gin.Context) {
+		user := c.MustGet("user").(*middleware.MyClaims)
+		c.JSON(http.StatusOK, gin.H{
+			"email": user.Email,
+			"name": user.Name,
+			"picture": user.Picture,
+		})
 	})
 
 	// versioned API
