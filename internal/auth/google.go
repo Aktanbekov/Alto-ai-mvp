@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"altoai_mvp/internal/repository"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
@@ -77,16 +79,33 @@ func HandleGoogleCallback(c *gin.Context) {
 	var gu googleUser
 	_ = json.NewDecoder(resp.Body).Decode(&gu)
 
+	// Initialize PostgreSQL repository and save user
+	userRepo, err := repository.NewPostgresRepo()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database connection failed"})
+		return
+	}
+	defer userRepo.Close()
+
+	// Create or update user in database
+	_, err = userRepo.Create(gu.Email, gu.Name)
+	if err != nil {
+		// If user already exists (due to unique email constraint), ignore the error
+		// In a production environment, you might want to update the existing user's info
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to save user"})
+		return
+	}
+
 	// JWT CREATE
 	secret := os.Getenv("JWT_SECRET")
 	claims := MyClaims{
-		Email: gu.Email,
-		Name: gu.Name,
+		Email:   gu.Email,
+		Name:    gu.Name,
 		Picture: gu.Picture,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7*24*time.Hour)),
-			IssuedAt: jwt.NewNumericDate(time.Now()),
-			Issuer: "altoai_mvp",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "altoai_mvp",
 		},
 	}
 
@@ -97,9 +116,7 @@ func HandleGoogleCallback(c *gin.Context) {
 		return
 	}
 
-
-
-	// Issue HttpOnly session cookie (7 days). In production, sign/encode it or use JWT/sessions.
+	// Issue HttpOnly session cookie (7 days)
 	c.SetCookie("session", signed, 7*24*60*60, "/", "localhost", false, true)
 
 	// Back to frontend

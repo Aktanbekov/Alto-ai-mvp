@@ -17,6 +17,7 @@ type UserRepo interface {
 	Create(email, name string) (models.User, error)
 	Update(id string, email, name *string) (models.User, error)
 	Delete(id string) error
+	Close() error
 }
 
 type userMemoryRepo struct {
@@ -88,5 +89,10 @@ func (r *userMemoryRepo) Delete(id string) error {
 		return ErrNotFound
 	}
 	delete(r.store, id)
+	return nil
+}
+
+func (r *userMemoryRepo) Close() error {
+	// Nothing to close for in-memory repository
 	return nil
 }
