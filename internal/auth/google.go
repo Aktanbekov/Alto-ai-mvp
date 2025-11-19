@@ -6,7 +6,9 @@ import (
 	"os"
 	"time"
 
+	"altoai_mvp/internal/models"
 	"altoai_mvp/internal/repository"
+	"altoai_mvp/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -77,9 +79,12 @@ func HandleGoogleCallback(c *gin.Context) {
 	defer resp.Body.Close()
 
 	var gu googleUser
-	_ = json.NewDecoder(resp.Body).Decode(&gu)
+	if err := json.NewDecoder(resp.Body).Decode(&gu); err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to decode user info"})
+		return
+	}
 
-	// Initialize PostgreSQL repository and save user
+	// Initialize user service and create/update user
 	userRepo, err := repository.NewPostgresRepo()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database connection failed"})
@@ -87,13 +92,17 @@ func HandleGoogleCallback(c *gin.Context) {
 	}
 	defer userRepo.Close()
 
-	// Create or update user in database
-	_, err = userRepo.Create(gu.Email, gu.Name)
+	userService := services.NewUserService(userRepo)
+
+	// Create user using service - ignore returned user since we don't need it
+	_, err = userService.Create(c.Request.Context(), models.CreateUserDTO{
+		Email: gu.Email,
+		Name:  gu.Name,
+	})
 	if err != nil {
-		// If user already exists (due to unique email constraint), ignore the error
-		// In a production environment, you might want to update the existing user's info
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to save user"})
-		return
+		// If error occurs (likely user already exists), we can ignore it
+		// In a production environment, you might want to handle this differently
+		// or update the existing user's information
 	}
 
 	// JWT CREATE
@@ -116,7 +125,7 @@ func HandleGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	// Issue HttpOnly session cookie (7 days)
+	// Issue HttpOnly session cookie
 	c.SetCookie("session", signed, 7*24*60*60, "/", "localhost", false, true)
 
 	// Back to frontend

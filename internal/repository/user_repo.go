@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"altoai_mvp/internal/models"
+
+	"github.com/google/uuid"
 )
 
 var ErrNotFound = errors.New("not found")

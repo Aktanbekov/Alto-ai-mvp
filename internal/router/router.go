@@ -6,7 +6,6 @@ import (
 	"altoai_mvp/internal/middleware"
 	"altoai_mvp/internal/repository"
 	"altoai_mvp/internal/services"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,13 +16,8 @@ func New() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestLogger())
 
-	// Initialize PostgreSQL repository
-	userRepo, err := repository.NewPostgresRepo()
-	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
-	}
-
 	// wiring (DI)
+	userRepo := repository.NewUserMemoryRepo()
 	userSvc := services.NewUserService(userRepo)
 	userH := handlers.NewUserHandler(userSvc)
 
@@ -36,8 +30,8 @@ func New() *gin.Engine {
 	r.GET("/me", middleware.JWTAuth(), func(c *gin.Context) {
 		user := c.MustGet("user").(*middleware.MyClaims)
 		c.JSON(http.StatusOK, gin.H{
-			"email":   user.Email,
-			"name":    user.Name,
+			"email": user.Email,
+			"name": user.Name,
 			"picture": user.Picture,
 		})
 	})
