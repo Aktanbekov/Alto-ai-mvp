@@ -63,8 +63,8 @@ export default function Dashboard() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <svg width="34" height="34" viewBox="0 0 24 24" className="text-sky-400">
-                            <path fill="currentColor" d="M12 2l4.2 2.5v5L12 12l-4.2-2.5v-5z"/>
-                            <path fill="currentColor" opacity=".6" d="M7.8 9.5 12 12v5l-4.2-2.5zM16.2 9.5 12 12v5l4.2-2.5z"/>
+                            <path fill="currentColor" d="M12 2l4.2 2.5v5L12 12l-4.2-2.5v-5z" />
+                            <path fill="currentColor" opacity=".6" d="M7.8 9.5 12 12v5l-4.2-2.5zM16.2 9.5 12 12v5l4.2-2.5z" />
                         </svg>
                         <span className="text-xl font-semibold tracking-wide">Alto</span>
                     </div>
@@ -116,10 +116,10 @@ export default function Dashboard() {
                                 >
                                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                                 </svg>
-                                <h3 className="text-lg font-medium text-white">Chat</h3>
+                                <h3 className="text-lg font-medium text-white">Interview Practice</h3>
                             </div>
                             <p className="text-sm text-blue-100">
-                                Start a conversation and get started.
+                                Practice your interview skills and get started.
                             </p>
                         </button>
 
@@ -154,7 +154,7 @@ export default function Dashboard() {
             <button
                 onClick={() => navigate("/chat")}
                 className="fixed bottom-6 right-6 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-110 z-50"
-                aria-label="Open Chat"
+                aria-label="Open Interview Practice"
             >
                 <svg
                     width="24"
