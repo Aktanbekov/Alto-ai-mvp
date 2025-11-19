@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+README
+LICENSE
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Node modules (will be installed in container)
+node_modules
+frontend/node_modules
+
+# Build artifacts
+frontend/dist
+*.exe
+*.test
+*.out
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Test files
+ai_tests/
+*_test.go
+test.go
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
