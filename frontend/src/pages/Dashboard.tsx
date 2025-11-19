@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getMe } from "../api";
 
 interface User {
@@ -8,6 +9,7 @@ interface User {
 }
 
 export default function Dashboard() {
+    const navigate = useNavigate();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -97,6 +99,30 @@ export default function Dashboard() {
 
                     {/* Dashboard Content */}
                     <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* Chat Card */}
+                        <button
+                            onClick={() => navigate("/chat")}
+                            className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl p-6 ring-1 ring-white/5 hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105 cursor-pointer text-left"
+                        >
+                            <div className="flex items-center gap-3 mb-2">
+                                <svg
+                                    width="24"
+                                    height="24"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    className="text-white"
+                                >
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                </svg>
+                                <h3 className="text-lg font-medium text-white">Chat</h3>
+                            </div>
+                            <p className="text-sm text-blue-100">
+                                Start a conversation and get started.
+                            </p>
+                        </button>
+
                         {/* Stats Card */}
                         <div className="bg-[#0f1115] rounded-xl p-6 ring-1 ring-white/5">
                             <h3 className="text-lg font-medium text-slate-300">Your Stats</h3>
@@ -123,6 +149,24 @@ export default function Dashboard() {
                     </div>
                 </div>
             </main>
+
+            {/* Floating Chat Button */}
+            <button
+                onClick={() => navigate("/chat")}
+                className="fixed bottom-6 right-6 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-110 z-50"
+                aria-label="Open Chat"
+            >
+                <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+            </button>
         </div>
     );
 }
