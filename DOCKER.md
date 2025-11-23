@@ -124,3 +124,4 @@ The Dockerfile uses a multi-stage build:
 - **Development**: Run `npm run dev` in frontend and `go run cmd/api/main.go` separately
 - **Production**: Use Docker to build and serve both frontend and backend together
 
+

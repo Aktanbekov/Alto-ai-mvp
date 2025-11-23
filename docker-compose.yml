@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   altoai-mvp:
     build:
@@ -7,9 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: altoai-mvp
     ports:
-      - "8080:8080"
+      - "3000:8080"  # Map host port 3000 to container port 8080
     environment:
       - GIN_MODE=release
+      - FRONTEND_URL=http://localhost:3000
+      - GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback
     env_file:
       - .env
     restart: unless-stopped
@@ -19,4 +19,5 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
 

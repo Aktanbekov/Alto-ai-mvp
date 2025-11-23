@@ -160,3 +160,4 @@ The `.env` file is automatically loaded by docker-compose.
 - Set `restart: unless-stopped` (already configured)
 - Monitor with: `docker-compose logs -f`
 
+

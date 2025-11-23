@@ -27,10 +27,22 @@ type googleUser struct {
 
 func googleConf() *oauth2.Config {
 	_ = godotenv.Load() // ok if .env not present; will use OS env
+	
+	// Get redirect URL from environment or use default
+	redirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
+	if redirectURL == "" {
+		// Default based on environment
+		if os.Getenv("GIN_MODE") == "release" {
+			redirectURL = "http://localhost:3000/auth/google/callback" // Docker default
+		} else {
+			redirectURL = "http://localhost:8080/auth/google/callback" // Local dev
+		}
+	}
+	
 	return &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  "http://localhost:8080/auth/google/callback",
+		RedirectURL:  redirectURL,
 		Scopes:       []string{"openid", "email", "profile"},
 		Endpoint:     google.Endpoint,
 	}
@@ -125,9 +137,26 @@ func HandleGoogleCallback(c *gin.Context) {
 		return
 	}
 
+	// Get frontend URL from environment or use default
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		// Default to same origin in production, or dev server in development
+		// Check if we're in production (no dev server running)
+		if os.Getenv("GIN_MODE") == "release" {
+			frontendURL = "http://localhost:3000" // Docker default
+		} else {
+			frontendURL = "http://localhost:5173" // Vite dev server
+		}
+	}
+
 	// Issue HttpOnly session cookie
-	c.SetCookie("session", signed, 7*24*60*60, "/", "localhost", false, true)
+	// Use empty domain for same-origin, or specific domain if needed
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	if cookieDomain == "" {
+		cookieDomain = "" // Empty means same origin
+	}
+	c.SetCookie("session", signed, 7*24*60*60, "/", cookieDomain, false, true)
 
 	// Back to frontend
-	c.Redirect(http.StatusFound, "http://localhost:5173/dashboard")
+	c.Redirect(http.StatusFound, frontendURL+"/dashboard")
 }
