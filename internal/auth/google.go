@@ -27,7 +27,7 @@ type googleUser struct {
 
 func googleConf() *oauth2.Config {
 	_ = godotenv.Load() // ok if .env not present; will use OS env
-	
+
 	// Get redirect URL from environment or use default
 	redirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
 	if redirectURL == "" {
@@ -38,7 +38,7 @@ func googleConf() *oauth2.Config {
 			redirectURL = "http://localhost:8080/auth/google/callback" // Local dev
 		}
 	}
-	
+
 	return &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
@@ -158,5 +158,5 @@ func HandleGoogleCallback(c *gin.Context) {
 	c.SetCookie("session", signed, 7*24*60*60, "/", cookieDomain, false, true)
 
 	// Back to frontend
-	c.Redirect(http.StatusFound, frontendURL+"/dashboard")
+	c.Redirect(http.StatusFound, frontendURL+"/chat")
 }
