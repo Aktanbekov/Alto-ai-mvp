@@ -1,13 +1,45 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getMe, logout } from "../api";
 
 export default function HomePage() {
   const navigate = useNavigate();
   const observerRef = useRef(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const startInterview = () => {
-    navigate("/login");
+    if (user) {
+      navigate("/chat");
+    } else {
+      navigate("/login");
+    }
   };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
+  useEffect(() => {
+    // Check if user is logged in
+    const checkAuth = async () => {
+      try {
+        const userData = await getMe();
+        setUser(userData);
+      } catch (err) {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
 
   useEffect(() => {
     // Lightweight scroll animation using Intersection Observer
@@ -60,12 +92,26 @@ export default function HomePage() {
             <a href="#features" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Features</a>
             <a href="#how-it-works" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">How It Works</a>
             <a href="#pricing" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Pricing</a>
-            <button
-              onClick={() => navigate("/login")}
-              className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-all"
-            >
-              Sign In
-            </button>
+            {!loading && (
+              user ? (
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-700 font-medium">{user.name || user.email}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-all"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => navigate("/login")}
+                  className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-all"
+                >
+                  Sign In
+                </button>
+              )
+            )}
           </div>
         </div>
       </nav>
@@ -90,7 +136,7 @@ export default function HomePage() {
                 onClick={startInterview}
                 className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-semibold text-lg hover:shadow-2xl transition-all transform hover:scale-105"
               >
-                Start Free Interview
+                {user ? "Start Interview" : "Start Free Interview"}
               </button>
               <button className="px-8 py-4 bg-white text-gray-700 rounded-full font-semibold text-lg hover:shadow-lg transition-all border-2 border-gray-200">
                 Watch Demo

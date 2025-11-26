@@ -15,4 +15,4 @@ func init() {
 
 func main() {
 	logic.LogicGpt()
-}
+}	

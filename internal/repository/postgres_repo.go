@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -41,6 +42,12 @@ func NewPostgresRepo() (UserRepo, error) {
 			id VARCHAR(36) PRIMARY KEY,
 			email VARCHAR(255) UNIQUE NOT NULL,
 			name VARCHAR(255) NOT NULL,
+			password_hash VARCHAR(255),
+			email_verified BOOLEAN DEFAULT FALSE,
+			verification_code VARCHAR(6),
+			verification_code_expires TIMESTAMP,
+			reset_code VARCHAR(6),
+			reset_code_expires TIMESTAMP,
 			created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL
 		)
@@ -49,11 +56,57 @@ func NewPostgresRepo() (UserRepo, error) {
 		return nil, fmt.Errorf("error creating users table: %v", err)
 	}
 
+	// Migrate existing table: add missing columns if they don't exist
+	migrations := []string{
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR(6)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires TIMESTAMP`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR(6)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_expires TIMESTAMP`,
+	}
+
+	// Check if password column exists and rename it to password_hash if needed
+	var passwordColExists bool
+	err = db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'users' AND column_name = 'password'
+		)
+	`).Scan(&passwordColExists)
+	
+	if err == nil && passwordColExists {
+		// Check if password_hash doesn't exist
+		var passwordHashExists bool
+		err = db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'users' AND column_name = 'password_hash'
+			)
+		`).Scan(&passwordHashExists)
+		
+		if err == nil && !passwordHashExists {
+			// Rename password to password_hash
+			_, err = db.Exec(`ALTER TABLE users RENAME COLUMN password TO password_hash`)
+			if err != nil {
+				return nil, fmt.Errorf("error renaming password column: %v", err)
+			}
+		}
+	}
+
+	// Run migrations
+	for _, migration := range migrations {
+		_, err = db.Exec(migration)
+		if err != nil {
+			return nil, fmt.Errorf("error running migration: %v", err)
+		}
+	}
+
 	return &postgresRepo{db: db}, nil
 }
 
 func (r *postgresRepo) List() ([]models.User, error) {
-	rows, err := r.db.Query("SELECT id, email, name, created_at, updated_at FROM users")
+	rows, err := r.db.Query("SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +115,26 @@ func (r *postgresRepo) List() ([]models.User, error) {
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt, &u.UpdatedAt)
+		var passwordHash, verificationCode, resetCode sql.NullString
+		var verificationCodeExpires, resetCodeExpires sql.NullTime
+		err := rows.Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, err
+		}
+		if passwordHash.Valid {
+			u.Password = passwordHash.String
+		}
+		if verificationCode.Valid {
+			u.VerificationCode = verificationCode.String
+		}
+		if resetCode.Valid {
+			u.ResetCode = resetCode.String
+		}
+		if verificationCodeExpires.Valid {
+			u.VerificationCodeExpires = verificationCodeExpires.Time
+		}
+		if resetCodeExpires.Valid {
+			u.ResetCodeExpires = resetCodeExpires.Time
 		}
 		users = append(users, u)
 	}
@@ -73,10 +143,12 @@ func (r *postgresRepo) List() ([]models.User, error) {
 
 func (r *postgresRepo) Get(id string) (models.User, error) {
 	var u models.User
+	var passwordHash, verificationCode, resetCode sql.NullString
+	var verificationCodeExpires, resetCodeExpires sql.NullTime
 	err := r.db.QueryRow(
-		"SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1",
+		"SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE id = $1",
 		id,
-	).Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return models.User{}, ErrNotFound
@@ -84,22 +156,72 @@ func (r *postgresRepo) Get(id string) (models.User, error) {
 	if err != nil {
 		return models.User{}, err
 	}
+	if passwordHash.Valid {
+		u.Password = passwordHash.String
+	}
+	if verificationCode.Valid {
+		u.VerificationCode = verificationCode.String
+	}
+	if resetCode.Valid {
+		u.ResetCode = resetCode.String
+	}
+	if verificationCodeExpires.Valid {
+		u.VerificationCodeExpires = verificationCodeExpires.Time
+	}
+	if resetCodeExpires.Valid {
+		u.ResetCodeExpires = resetCodeExpires.Time
+	}
 	return u, nil
 }
 
-func (r *postgresRepo) Create(email, name string) (models.User, error) {
+func (r *postgresRepo) GetByEmail(email string) (models.User, error) {
+	var u models.User
+	var passwordHash, verificationCode, resetCode sql.NullString
+	var verificationCodeExpires, resetCodeExpires sql.NullTime
+	err := r.db.QueryRow(
+		"SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE email = $1",
+		email,
+	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return models.User{}, ErrNotFound
+	}
+	if err != nil {
+		return models.User{}, err
+	}
+	if passwordHash.Valid {
+		u.Password = passwordHash.String
+	}
+	if verificationCode.Valid {
+		u.VerificationCode = verificationCode.String
+	}
+	if resetCode.Valid {
+		u.ResetCode = resetCode.String
+	}
+	if verificationCodeExpires.Valid {
+		u.VerificationCodeExpires = verificationCodeExpires.Time
+	}
+	if resetCodeExpires.Valid {
+		u.ResetCodeExpires = resetCodeExpires.Time
+	}
+	return u, nil
+}
+
+func (r *postgresRepo) Create(email, name, passwordHash string) (models.User, error) {
 	now := time.Now().UTC()
 	u := models.User{
-		ID:        uuid.New().String(),
-		Email:     email,
-		Name:      name,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            uuid.New().String(),
+		Email:         email,
+		Name:          name,
+		Password:      passwordHash,
+		EmailVerified: false,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	_, err := r.db.Exec(
-		"INSERT INTO users (id, email, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
-		u.ID, u.Email, u.Name, u.CreatedAt, u.UpdatedAt,
+		"INSERT INTO users (id, email, name, password_hash, email_verified, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		u.ID, u.Email, u.Name, u.Password, u.EmailVerified, u.CreatedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return models.User{}, err
@@ -156,6 +278,105 @@ func (r *postgresRepo) Delete(id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *postgresRepo) SetVerificationCode(email, code string, expiresAt time.Time) error {
+	_, err := r.db.Exec(
+		"UPDATE users SET verification_code = $1, verification_code_expires = $2, updated_at = $3 WHERE email = $4",
+		code, expiresAt, time.Now().UTC(), email,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *postgresRepo) VerifyEmail(email, code string) error {
+	var storedCode sql.NullString
+	var expiresAt sql.NullTime
+	err := r.db.QueryRow(
+		"SELECT verification_code, verification_code_expires FROM users WHERE email = $1",
+		email,
+	).Scan(&storedCode, &expiresAt)
+
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if !storedCode.Valid || storedCode.String != code {
+		return errors.New("invalid verification code")
+	}
+	if !expiresAt.Valid {
+		return errors.New("verification code expired")
+	}
+	// Use UTC for comparison to avoid timezone issues
+	if time.Now().UTC().After(expiresAt.Time) {
+		return errors.New("verification code expired")
+	}
+
+	_, err = r.db.Exec(
+		"UPDATE users SET email_verified = TRUE, verification_code = NULL, verification_code_expires = NULL, updated_at = $1 WHERE email = $2",
+		time.Now().UTC(), email,
+	)
+	return err
+}
+
+func (r *postgresRepo) MarkEmailVerified(email string) error {
+	_, err := r.db.Exec(
+		"UPDATE users SET email_verified = TRUE, updated_at = $1 WHERE email = $2",
+		time.Now().UTC(), email,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *postgresRepo) SetResetCode(email, code string, expiresAt time.Time) error {
+	_, err := r.db.Exec(
+		"UPDATE users SET reset_code = $1, reset_code_expires = $2, updated_at = $3 WHERE email = $4",
+		code, expiresAt, time.Now().UTC(), email,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *postgresRepo) ResetPassword(email, code, newPasswordHash string) error {
+	var storedCode sql.NullString
+	var expiresAt sql.NullTime
+	err := r.db.QueryRow(
+		"SELECT reset_code, reset_code_expires FROM users WHERE email = $1",
+		email,
+	).Scan(&storedCode, &expiresAt)
+
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if !storedCode.Valid || storedCode.String != code {
+		return errors.New("invalid reset code")
+	}
+	if !expiresAt.Valid {
+		return errors.New("reset code expired")
+	}
+	// Use UTC for comparison to avoid timezone issues
+	if time.Now().UTC().After(expiresAt.Time) {
+		return errors.New("reset code expired")
+	}
+
+	_, err = r.db.Exec(
+		"UPDATE users SET password_hash = $1, reset_code = NULL, reset_code_expires = NULL, updated_at = $2 WHERE email = $3",
+		newPasswordHash, time.Now().UTC(), email,
+	)
+	return err
 }
 
 func (r *postgresRepo) Close() error {

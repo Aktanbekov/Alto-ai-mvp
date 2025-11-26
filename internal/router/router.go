@@ -6,6 +6,7 @@ import (
 	"altoai_mvp/internal/middleware"
 	"altoai_mvp/internal/repository"
 	"altoai_mvp/internal/services"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,9 +20,22 @@ func New() *gin.Engine {
 	r.Use(gin.Recovery(), middleware.RequestLogger())
 
 	// wiring (DI)
-	userRepo := repository.NewUserMemoryRepo()
+	// Use PostgreSQL repository
+	userRepo, err := repository.NewPostgresRepo()
+	if err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
+	// Note: We don't close the connection here as it's used throughout the server's lifetime
+	// The connection will be closed when the server shuts down
+
 	userSvc := services.NewUserService(userRepo)
 	userH := handlers.NewUserHandler(userSvc)
+	chatH := handlers.NewChatHandler()
+	authSvc := services.NewAuthService(userRepo)
+	authH := handlers.NewAuthHandler(authSvc)
+
+	// Pass userRepo to Google auth handler
+	auth.SetUserRepo(userRepo)
 
 	// health
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
@@ -41,11 +55,25 @@ func New() *gin.Engine {
 	// versioned API
 	v1 := r.Group("/api/v1")
 	{
+		// Auth endpoints
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/login", authH.Login)
+			auth.POST("/register", authH.Register)
+			auth.POST("/verify-email", authH.VerifyEmail)
+			auth.POST("/resend-verification", authH.ResendVerificationCode)
+			auth.POST("/forgot-password", authH.ForgotPassword)
+			auth.POST("/reset-password", authH.ResetPassword)
+			auth.POST("/logout", authH.Logout)
+			auth.POST("/refresh", authH.Refresh)
+		}
+
 		v1.GET("/users", userH.List)
 		v1.POST("/users", userH.Create)
 		v1.GET("/users/:id", userH.Get)
 		v1.PUT("/users/:id", userH.Update)
 		v1.DELETE("/users/:id", userH.Delete)
+		v1.POST("/chat", chatH.Chat)
 	}
 
 	// Serve static files from frontend/dist (for production)

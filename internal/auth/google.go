@@ -17,6 +17,13 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+var sharedUserRepo repository.UserRepo
+
+// SetUserRepo sets the shared user repository for Google auth
+func SetUserRepo(repo repository.UserRepo) {
+	sharedUserRepo = repo
+}
+
 type googleUser struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
@@ -96,25 +103,57 @@ func HandleGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	// Initialize user service and create/update user
-	userRepo, err := repository.NewPostgresRepo()
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database connection failed"})
+	// Use shared user repository to create/update user
+	if sharedUserRepo == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database not initialized"})
 		return
 	}
-	defer userRepo.Close()
 
-	userService := services.NewUserService(userRepo)
+	userService := services.NewUserService(sharedUserRepo)
 
-	// Create user using service - ignore returned user since we don't need it
-	_, err = userService.Create(c.Request.Context(), models.CreateUserDTO{
-		Email: gu.Email,
-		Name:  gu.Name,
-	})
-	if err != nil {
-		// If error occurs (likely user already exists), we can ignore it
-		// In a production environment, you might want to handle this differently
-		// or update the existing user's information
+	// Check if user already exists
+	existingUser, err := sharedUserRepo.GetByEmail(gu.Email)
+	if err != nil && err != repository.ErrNotFound {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to check user existence"})
+		return
+	}
+
+	// If user doesn't exist, create them (OAuth users don't need password)
+	if err == repository.ErrNotFound {
+		_, err = userService.Create(c.Request.Context(), models.CreateUserDTO{
+			Email:    gu.Email,
+			Name:     gu.Name,
+			Password: "", // OAuth users don't have passwords
+		})
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+			return
+		}
+		// Mark email as verified for OAuth users (Google already verified the email)
+		err = sharedUserRepo.MarkEmailVerified(gu.Email)
+		if err != nil {
+			// Log but don't fail the auth flow
+			_ = err
+		}
+	} else {
+		// User exists - update their name if it changed and mark email as verified
+		if existingUser.Name != gu.Name {
+			_, err = userService.Update(c.Request.Context(), existingUser.ID, models.UpdateUserDTO{
+				Name: &gu.Name,
+			})
+			if err != nil {
+				// Log but don't fail the auth flow
+				_ = err
+			}
+		}
+		// Ensure OAuth users have verified email
+		if !existingUser.EmailVerified {
+			err = sharedUserRepo.MarkEmailVerified(gu.Email)
+			if err != nil {
+				// Log but don't fail the auth flow
+				_ = err
+			}
+		}
 	}
 
 	// JWT CREATE
@@ -158,5 +197,5 @@ func HandleGoogleCallback(c *gin.Context) {
 	c.SetCookie("session", signed, 7*24*60*60, "/", cookieDomain, false, true)
 
 	// Back to frontend
-	c.Redirect(http.StatusFound, frontendURL+"/chat")
+	c.Redirect(http.StatusFound, frontendURL+"/")
 }

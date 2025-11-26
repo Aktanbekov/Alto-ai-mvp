@@ -12,6 +12,7 @@ import (
 type UserService interface {
 	List(ctx context.Context) ([]models.User, error)
 	Get(ctx context.Context, id string) (models.User, error)
+	GetByEmail(ctx context.Context, email string) (models.User, error)
 	Create(ctx context.Context, dto models.CreateUserDTO) (models.User, error)
 	Update(ctx context.Context, id string, dto models.UpdateUserDTO) (models.User, error)
 	Delete(ctx context.Context, id string) error
@@ -30,27 +31,46 @@ func (s *userService) withTimeout(ctx context.Context) (context.Context, context
 }
 
 func (s *userService) List(ctx context.Context) ([]models.User, error) {
-	ctx, cancel := s.withTimeout(ctx); defer cancel()
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
 	return s.repo.List()
 }
 
 func (s *userService) Get(ctx context.Context, id string) (models.User, error) {
-	ctx, cancel := s.withTimeout(ctx); defer cancel()
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
 	return s.repo.Get(id)
 }
 
 func (s *userService) Create(ctx context.Context, dto models.CreateUserDTO) (models.User, error) {
-	ctx, cancel := s.withTimeout(ctx); defer cancel()
-	return s.repo.Create(dto.Email, dto.Name)
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+	// Password will be hashed by the auth service before calling this
+	// For Google OAuth users, password will be empty
+	passwordHash := ""
+	if dto.Password != "" {
+		// If password is provided, it should already be hashed by auth service
+		// But for OAuth users, we pass empty string
+		passwordHash = dto.Password
+	}
+	return s.repo.Create(dto.Email, dto.Name, passwordHash)
+}
+
+func (s *userService) GetByEmail(ctx context.Context, email string) (models.User, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+	return s.repo.GetByEmail(email)
 }
 
 func (s *userService) Update(ctx context.Context, id string, dto models.UpdateUserDTO) (models.User, error) {
-	ctx, cancel := s.withTimeout(ctx); defer cancel()
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
 	return s.repo.Update(id, dto.Email, dto.Name)
 }
 
 func (s *userService) Delete(ctx context.Context, id string) error {
-	ctx, cancel := s.withTimeout(ctx); defer cancel()
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
 	return s.repo.Delete(id)
 }
 

@@ -5,6 +5,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 // Lazy load components for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const Chat = lazy(() => import("./pages/Chat"));
 
 // Loading fallback component
@@ -23,6 +25,8 @@ export default function App() {
     <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route
           path="/chat"
         element={

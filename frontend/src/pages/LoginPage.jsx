@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { login } from "../api";
 
 // Minimal inline SVG icons
 const MailIcon = (props) => (
@@ -50,14 +51,8 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ email, password }),
-            });
-            if (!res.ok) throw new Error("Invalid credentials");
-            navigate("/chat");
+            await login(email, password);
+            navigate("/");
         } catch (err) {
             alert(err.message || "Login failed");
         } finally {
@@ -139,8 +134,8 @@ export default function LoginPage() {
                         </button>
 
                         <div className="flex justify-between text-xs text-gray-500">
-                            <a className="hover:text-indigo-600 transition-colors" href="#">Forgot password?</a>
-                            <a className="hover:text-indigo-600 transition-colors" href="#">Sign up</a>
+                            <Link to="/forgot-password" className="hover:text-indigo-600 transition-colors">Forgot password?</Link>
+                            <Link to="/signup" className="hover:text-indigo-600 transition-colors">Sign up</Link>
                         </div>
 
                         {/* Divider */}

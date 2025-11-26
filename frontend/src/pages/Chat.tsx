@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { sendChatMessage, logout } from "../api";
 
 interface Message {
   id: number;
@@ -28,13 +29,6 @@ const statusTexts: Record<EmojiState, string> = {
   proud: "Excellent Work!",
 };
 
-const aiResponses = [
-  "That's interesting! Tell me more about that experience.",
-  "Great answer! Can you elaborate on the challenges you faced?",
-  "I see. How did that experience shape your approach to problem-solving?",
-  "Excellent! What did you learn from that situation?",
-  "That's impressive! How do you think that applies to this role?",
-];
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -42,7 +36,7 @@ export default function Chat() {
     {
       id: 1,
       sender: "ai",
-      text: "Hello! I'm your AI interviewer today. I'm here to learn more about you and your experiences. Let's start with an easy question: Can you tell me a bit about yourself?",
+      text: "Hello from AI! I'm here to chat with you. How can I help you today?",
       timestamp: new Date(),
     },
   ]);
@@ -77,7 +71,7 @@ export default function Chat() {
     setEmojiState(state);
   };
 
-  const handleSend = (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputValue.trim()) return;
 
@@ -102,15 +96,28 @@ export default function Chat() {
     changeEmoji("thinking");
     setIsTyping(true);
 
-    // Simulate AI response after delay
-    const typingTimeout = setTimeout(() => {
+    try {
+      // Build conversation history for GPT
+      const conversationHistory = [
+        ...messages.map((msg) => ({
+          role: msg.sender === "user" ? "user" : "assistant",
+          content: msg.text,
+        })),
+        {
+          role: "user",
+          content: messageText,
+        },
+      ];
+
+      // Send to GPT API
+      const responseText = await sendChatMessage(conversationHistory);
+      
       setIsTyping(false);
       changeEmoji("excited");
       
-      const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
       const newAiMessage: Message = {
         id: messages.length + 2,
-        text: randomResponse,
+        text: responseText,
         sender: "ai",
         timestamp: new Date(),
       };
@@ -121,8 +128,18 @@ export default function Chat() {
         changeEmoji("happy");
       }, 1500);
       timeoutRefs.current.push(happyTimeout);
-    }, 1500);
-    timeoutRefs.current.push(typingTimeout);
+    } catch (error) {
+      setIsTyping(false);
+      changeEmoji("happy");
+      
+      const errorMessage: Message = {
+        id: messages.length + 2,
+        text: `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        sender: "ai",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -142,9 +159,26 @@ export default function Chat() {
     }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     if (window.confirm("Are you sure you want to end this interview session?")) {
+      try {
+        await logout();
+      } catch (err) {
+        console.error("Logout error:", err);
+      }
       navigate("/");
+    }
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm("Are you sure you want to logout?")) {
+      try {
+        await logout();
+        navigate("/");
+      } catch (err) {
+        console.error("Logout error:", err);
+        navigate("/");
+      }
     }
   };
 
@@ -165,9 +199,15 @@ export default function Chat() {
             </button>
             <button
               onClick={handleEndSession}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-all"
+              className="px-4 py-2 text-gray-600 hover:text-indigo-600 font-medium transition-colors"
             >
               End Session
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-all"
+            >
+              Logout
             </button>
           </div>
         </div>

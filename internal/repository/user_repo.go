@@ -15,9 +15,15 @@ var ErrNotFound = errors.New("not found")
 type UserRepo interface {
 	List() ([]models.User, error)
 	Get(id string) (models.User, error)
-	Create(email, name string) (models.User, error)
+	GetByEmail(email string) (models.User, error)
+	Create(email, name, passwordHash string) (models.User, error)
 	Update(id string, email, name *string) (models.User, error)
 	Delete(id string) error
+	SetVerificationCode(email, code string, expiresAt time.Time) error
+	VerifyEmail(email, code string) error
+	MarkEmailVerified(email string) error
+	SetResetCode(email, code string, expiresAt time.Time) error
+	ResetPassword(email, code, newPasswordHash string) error
 	Close() error
 }
 
@@ -50,16 +56,29 @@ func (r *userMemoryRepo) Get(id string) (models.User, error) {
 	return u, nil
 }
 
-func (r *userMemoryRepo) Create(email, name string) (models.User, error) {
+func (r *userMemoryRepo) GetByEmail(email string) (models.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, u := range r.store {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return models.User{}, ErrNotFound
+}
+
+func (r *userMemoryRepo) Create(email, name, passwordHash string) (models.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
 	u := models.User{
-		ID:        uuid.New().String(),
-		Email:     email,
-		Name:      name,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            uuid.New().String(),
+		Email:         email,
+		Name:          name,
+		Password:      passwordHash,
+		EmailVerified: false,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	r.store[u.ID] = u
 	return u, nil
@@ -91,6 +110,94 @@ func (r *userMemoryRepo) Delete(id string) error {
 	}
 	delete(r.store, id)
 	return nil
+}
+
+func (r *userMemoryRepo) SetVerificationCode(email, code string, expiresAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, u := range r.store {
+		if u.Email == email {
+			u.VerificationCode = code
+			u.VerificationCodeExpires = expiresAt
+			u.UpdatedAt = time.Now().UTC()
+			r.store[id] = u
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *userMemoryRepo) VerifyEmail(email, code string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, u := range r.store {
+		if u.Email == email {
+			if u.VerificationCode != code {
+				return errors.New("invalid verification code")
+			}
+			if time.Now().After(u.VerificationCodeExpires) {
+				return errors.New("verification code expired")
+			}
+			u.EmailVerified = true
+			u.VerificationCode = ""
+			u.VerificationCodeExpires = time.Time{}
+			u.UpdatedAt = time.Now().UTC()
+			r.store[id] = u
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *userMemoryRepo) MarkEmailVerified(email string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, u := range r.store {
+		if u.Email == email {
+			u.EmailVerified = true
+			u.UpdatedAt = time.Now().UTC()
+			r.store[id] = u
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *userMemoryRepo) SetResetCode(email, code string, expiresAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, u := range r.store {
+		if u.Email == email {
+			u.ResetCode = code
+			u.ResetCodeExpires = expiresAt
+			u.UpdatedAt = time.Now().UTC()
+			r.store[id] = u
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *userMemoryRepo) ResetPassword(email, code, newPasswordHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, u := range r.store {
+		if u.Email == email {
+			if u.ResetCode != code {
+				return errors.New("invalid reset code")
+			}
+			if time.Now().After(u.ResetCodeExpires) {
+				return errors.New("reset code expired")
+			}
+			u.Password = newPasswordHash
+			u.ResetCode = ""
+			u.ResetCodeExpires = time.Time{}
+			u.UpdatedAt = time.Now().UTC()
+			r.store[id] = u
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 func (r *userMemoryRepo) Close() error {
