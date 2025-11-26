@@ -65,19 +65,19 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 grid place-items-center px-4 py-12">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 grid place-items-center px-4 py-8 sm:py-12">
             <div className="w-full max-w-md animate-fade-in-up">
                 {/* Card */}
-                <div className="rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200 p-8">
+                <div className="rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200 p-6 sm:p-8">
                     {/* Logo */}
-                    <div className="flex items-center justify-center gap-3 mb-6 select-none">
-                        <span className="text-4xl">🤖</span>
-                        <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4 sm:mb-6 select-none">
+                        <span className="text-3xl sm:text-4xl">🤖</span>
+                        <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                             AI Interviewer
                         </span>
                     </div>
 
-                    <p className="text-sm text-gray-600 mb-6 text-center">
+                    <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6 text-center">
                         Sign in to continue to your interview practice
                     </p>
 
@@ -94,7 +94,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@example.com"
-                                    className="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 pl-10 pr-3 outline-none text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+                                    className="w-full bg-gray-50 border border-gray-300 rounded-xl py-3 sm:py-2.5 pl-10 pr-3 outline-none text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 min-h-[44px]"
                                 />
                             </div>
                         </label>
@@ -111,7 +111,7 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 pl-10 pr-10 outline-none text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+                                    className="w-full bg-gray-50 border border-gray-300 rounded-xl py-3 sm:py-2.5 pl-10 pr-10 outline-none text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 min-h-[44px]"
                                 />
                                 <button
                                     type="button"
@@ -128,7 +128,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full rounded-xl py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg disabled:opacity-60 transition-all"
+                            className="w-full rounded-xl py-3 sm:py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg disabled:opacity-60 transition-all min-h-[44px]"
                         >
                             {loading ? "Logging in…" : "Log in"}
                         </button>
@@ -148,7 +148,7 @@ export default function LoginPage() {
                         <button
                             type="button"
                             onClick={googleLogin}
-                            className="w-full border border-gray-300 rounded-xl py-2.5 text-sm font-medium bg-white hover:bg-gray-50 transition flex items-center justify-center gap-2 text-gray-700"
+                            className="w-full border border-gray-300 rounded-xl py-3 sm:py-2.5 text-sm font-medium bg-white hover:bg-gray-50 transition flex items-center justify-center gap-2 text-gray-700 min-h-[44px]"
                         >
                             <GoogleIcon className="w-4 h-4" />
                             <span>Log in with Google</span>

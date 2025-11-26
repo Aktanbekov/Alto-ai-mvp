@@ -43,3 +43,4 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	response.OK(c, ChatResponse{Content: responseText})
 }
 
+

@@ -97,4 +97,3 @@ AI Interviewer Team`, name, code)
 
 	return s.sendEmail(email, subject, body)
 }
-
