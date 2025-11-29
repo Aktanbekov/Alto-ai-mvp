@@ -1,0 +1,181 @@
+package interview
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+)
+
+var (
+	analyzer     *VisaAnalyzer
+	analyzerOnce sync.Once
+)
+
+// GetAnalyzer returns a singleton VisaAnalyzer instance
+func GetAnalyzer() *VisaAnalyzer {
+	analyzerOnce.Do(func() {
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			apiKey = os.Getenv("GPT_API_KEY")
+		}
+		analyzer = NewVisaAnalyzer(apiKey)
+	})
+	return analyzer
+}
+
+// AnalyzeAnswer analyzes a question-answer pair using the VisaAnalyzer
+// This replaces the old CallLLM function and provides detailed feedback
+func AnalyzeAnswer(q Question, answer string) (*AnalysisResponse, error) {
+	va := GetAnalyzer()
+	if va == nil {
+		return nil, ErrAnalyzerNotInitialized
+	}
+	if va.apiKey == "" {
+		return nil, fmt.Errorf("API key not set for analyzer")
+	}
+	return va.AnalyzeAnswer(q.Text, answer)
+}
+
+// CallLLM is kept for backward compatibility but now uses the new analyzer
+// Deprecated: Use AnalyzeAnswer instead
+func CallLLM(q Question, answer string) (*EvalResult, error) {
+	analysis, err := AnalyzeAnswer(q, answer)
+	if err != nil {
+		return nil, err
+	}
+	// Convert AnalysisResponse to EvalResult for backward compatibility
+	return convertAnalysisToEval(analysis, q), nil
+}
+
+// ConvertAnalysisToEval converts the new AnalysisResponse to the old EvalResult format
+// This allows backward compatibility with existing code
+func ConvertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
+	if analysis == nil {
+		return nil
+	}
+	return convertAnalysisToEval(analysis, q)
+}
+
+// convertAnalysisToEval converts the new AnalysisResponse to the old EvalResult format
+// This allows backward compatibility with existing code
+func convertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
+	// New grading system: scores are on a 5–25 scale (via AnalysisScores.TotalScore)
+	// We convert this to a 0–100 percentage using ScoreToPercentage, then to 0–10 buckets.
+
+	// Safeguard if scores are missing
+	totalScore := 0
+	if analysis.Scores.TotalScore != 0 {
+		totalScore = analysis.Scores.TotalScore
+	}
+
+	percentage := int(ScoreToPercentage(totalScore)) // 0–100
+
+	// Map overall percentage (0–100) to quality (0–10)
+	quality := percentage / 10
+	if quality > 10 {
+		quality = 10
+	}
+
+	// Map criteria scores (1–5) to 0–10 scale using simple *2 scaling
+	clarity := analysis.Scores.AnswerQuality * 2
+	if clarity > 10 {
+		clarity = 10
+	}
+	// Use goal_understanding as a proxy for confidence
+	confidence := analysis.Scores.GoalUnderstanding * 2
+	if confidence > 10 {
+		confidence = 10
+	}
+
+	// Map overall percentage score to intent risk (inverse: higher score = lower risk)
+	intentRisk := 10 - (percentage / 10)
+	if intentRisk < 0 {
+		intentRisk = 0
+	}
+
+	// Determine if followup is needed based on low score
+	// Roughly: below ~70% overall needs followup
+	needsFollowup := percentage < 70
+	suggestedFollowup := ""
+	if needsFollowup {
+		// Use feedback text to guess the main followup area
+		if contains(analysis.Feedback, "purpose", "study", "why", "goal") {
+			suggestedFollowup = "clarify_purpose"
+		} else if contains(analysis.Feedback, "university", "school", "college", "program") {
+			suggestedFollowup = "clarify_university"
+		} else if contains(analysis.Feedback, "financial", "money", "fund", "sponsor", "income") {
+			suggestedFollowup = "clarify_financial"
+		} else if contains(analysis.Feedback, "home", "country", "return", "ties", "family") {
+			suggestedFollowup = "clarify_home_ties"
+		}
+	}
+
+	// Calculate score deltas based on overall score
+	// Lower scores increase risk, higher scores decrease risk
+	scoreDelta := ScoreDelta{}
+	if percentage < 60 {
+		// Poor answer increases risk
+		scoreDelta.OverallRisk = 5
+		if q.Category == "Academic Background" {
+			scoreDelta.Academic = 5
+		} else if q.Category == "Financial Capability" {
+			scoreDelta.Financial = 5
+		} else if q.Category == "Immigration Intent" || q.Category == "Post-Graduation Plans" {
+			scoreDelta.IntentToReturn = 5
+		}
+	} else if percentage >= 80 {
+		// Good answer decreases risk
+		scoreDelta.OverallRisk = -3
+		if q.Category == "Academic Background" {
+			scoreDelta.Academic = -3
+		} else if q.Category == "Financial Capability" {
+			scoreDelta.Financial = -3
+		} else if q.Category == "Immigration Intent" || q.Category == "Post-Graduation Plans" {
+			scoreDelta.IntentToReturn = -3
+		}
+	}
+
+	// Build flags list from classification and feedback
+	var flags []string
+	if strings.TrimSpace(analysis.Classification) != "" {
+		flags = append(flags, "classification:"+analysis.Classification)
+	}
+	if strings.TrimSpace(analysis.Feedback) != "" {
+		flags = append(flags, "feedback:"+analysis.Feedback)
+	}
+
+	return &EvalResult{
+		Quality:            quality,
+		Clarity:            clarity,
+		Confidence:         confidence,
+		Flags:              flags,
+		IntentToReturnRisk: intentRisk,
+		SuggestedFollowup:  suggestedFollowup,
+		NeedsFollowup:      needsFollowup,
+		ScoreDelta:         scoreDelta,
+	}
+}
+
+// Helper function to check if a string contains any of the given substrings (case-insensitive)
+func contains(s string, substrings ...string) bool {
+	sLower := strings.ToLower(s)
+	for _, sub := range substrings {
+		if strings.Contains(sLower, strings.ToLower(sub)) {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrAnalyzerNotInitialized is returned when the analyzer is not properly initialized
+var ErrAnalyzerNotInitialized = &AnalyzerError{Message: "analyzer not initialized"}
+
+// AnalyzerError represents an error from the analyzer
+type AnalyzerError struct {
+	Message string
+}
+
+func (e *AnalyzerError) Error() string {
+	return e.Message
+}

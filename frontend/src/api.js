@@ -7,14 +7,17 @@ export async function getMe() {
   return res.json();
 }
 
-export async function sendChatMessage(messages) {
+export async function sendChatMessage(messages, sessionId = null) {
   const res = await fetch(`${API}/api/v1/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     credentials: "include",
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ 
+      messages,
+      session_id: sessionId 
+    }),
   });
   
   if (!res.ok) {
@@ -23,7 +26,7 @@ export async function sendChatMessage(messages) {
   }
   
   const data = await res.json();
-  return data.data.content;
+  return data.data; // Return full response object, not just content
 }
 
 export async function login(email, password) {

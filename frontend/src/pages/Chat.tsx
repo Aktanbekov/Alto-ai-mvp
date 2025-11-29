@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendChatMessage, logout } from "../api";
+import AnswerFeedbackCard from "../components/AnswerFeedbackCard";
 
 interface Message {
   id: number;
@@ -9,44 +10,79 @@ interface Message {
   timestamp?: Date;
 }
 
-type EmojiState = "happy" | "thinking" | "excited" | "listening" | "impressed" | "proud";
+type EmojiState = "default" | "thinking" | "bad" | "worst" | "good" | "perfect";
 
 const emojiStates: Record<EmojiState, string> = {
-  happy: "🤖",
+  // Default when starting the interview
+  default: "😃",
+  // While waiting for the response from GPT
   thinking: "🤔",
-  excited: "🤩",
-  listening: "👂",
-  impressed: "😮",
-  proud: "🎉",
+  // Answer quality buckets
+  bad: "😕",
+  worst: "😟",
+  good: "☺️",
+  perfect: "😇",
 };
 
 const statusTexts: Record<EmojiState, string> = {
-  happy: "Active & Listening",
+  default: "Active & Listening",
   thinking: "Analyzing Response...",
-  excited: "Great Answer!",
-  listening: "Waiting for Response",
-  impressed: "Impressive!",
-  proud: "Excellent Work!",
+  bad: "Needs Improvement",
+  worst: "Significant Issues Detected",
+  good: "Good Answer!",
+  perfect: "Excellent Answer!",
 };
 
 
+interface InterviewScores {
+  academic: number;
+  financial: number;
+  intent_to_return: number;
+  overall_risk: number;
+}
+
+interface AnalysisScores {
+  goal_understanding: number;
+  logical_mindset: number;
+  no_migration_intent: number;
+  no_hate_to_home_country: number;
+  answer_quality: number;
+  total_score: number;
+}
+
+interface ChatAnalysis {
+  scores: AnalysisScores;
+  classification: string;
+  feedback: string;
+}
+
+interface ChatResponse {
+  content: string;
+  session_id?: string;
+  question_id?: string;
+  finished: boolean;
+  scores?: InterviewScores;
+  is_new_session?: boolean;
+  analysis?: ChatAnalysis;
+  grade?: string;
+  suggestions?: string[];
+  improved_version?: string;
+}
+
 export default function Chat() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      sender: "ai",
-      text: "Hello from AI! I'm here to chat with you. How can I help you today?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [emojiState, setEmojiState] = useState<EmojiState>("happy");
+  const [emojiState, setEmojiState] = useState<EmojiState>("default");
   const [isTyping, setIsTyping] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [scores, setScores] = useState<InterviewScores | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [answerAnalyses, setAnswerAnalyses] = useState<Array<{ question: string, answer: string, analysis: ChatResponse['analysis'] }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,7 +100,57 @@ export default function Chat() {
     };
   }, []);
 
-  const progress = Math.min((messages.length / 15) * 100, 100);
+  // Initialize interview on mount
+  useEffect(() => {
+    const initializeInterview = async () => {
+      try {
+        setIsTyping(true);
+        changeEmoji("thinking");
+        const response: ChatResponse = await sendChatMessage([], null);
+
+        if (response.session_id) {
+          setSessionId(response.session_id);
+        }
+
+        if (response.content) {
+          const initialMessage: Message = {
+            id: 1,
+            sender: "ai",
+            text: response.content,
+            timestamp: new Date(),
+          };
+          setMessages([initialMessage]);
+        }
+
+        if (response.scores) {
+          setScores(response.scores);
+        }
+
+        if (response.finished) {
+          setFinished(true);
+        }
+
+        setIsTyping(false);
+        changeEmoji("default");
+      } catch (error) {
+        setIsTyping(false);
+        changeEmoji("default");
+        const errorMessage: Message = {
+          id: 1,
+          text: `Failed to start interview: ${error instanceof Error ? error.message : "Unknown error"}`,
+          sender: "ai",
+          timestamp: new Date(),
+        };
+        setMessages([errorMessage]);
+      }
+    };
+
+    initializeInterview();
+  }, []);
+
+  // Calculate progress based on messages (each Q&A = 2 messages)
+  const qaPairs = Math.floor(messages.filter(m => m.sender === "user").length);
+  const progress = finished ? 100 : Math.min((qaPairs / 8) * 100, 100); // Assuming ~8 questions
   const messageCount = messages.length;
   const timeElapsed = "12m"; // You can calculate this based on start time
 
@@ -74,7 +160,7 @@ export default function Chat() {
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || finished) return;
 
     // Clear any existing timeouts to prevent double updates
     timeoutRefs.current.forEach((timeout) => clearTimeout(timeout));
@@ -92,13 +178,17 @@ export default function Chat() {
 
     setMessages((prev) => [...prev, newUserMessage]);
     setInputValue("");
-    
+
     // Immediately change emoji to thinking
     changeEmoji("thinking");
     setIsTyping(true);
 
     try {
-      // Build conversation history for GPT
+      // Last AI question before this answer (from previous messages state)
+      const aiMessagesBeforeAnswer = messages.filter(m => m.sender === "ai");
+      const lastQuestionText = aiMessagesBeforeAnswer[aiMessagesBeforeAnswer.length - 1]?.text || "";
+
+      // Build conversation history for interview
       const conversationHistory = [
         ...messages.map((msg) => ({
           role: msg.sender === "user" ? "user" : "assistant",
@@ -110,29 +200,90 @@ export default function Chat() {
         },
       ];
 
-      // Send to GPT API
-      const responseText = await sendChatMessage(conversationHistory);
-      
-      setIsTyping(false);
-      changeEmoji("excited");
-      
-      const newAiMessage: Message = {
-        id: messages.length + 2,
-        text: responseText,
-        sender: "ai",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, newAiMessage]);
+      // Send to interview API (cast to any to allow string sessionId)
+      const response: ChatResponse = await (sendChatMessage as any)(
+        conversationHistory,
+        sessionId ?? null
+      );
 
-      // Change back to happy after showing excited
-      const happyTimeout = setTimeout(() => {
-        changeEmoji("happy");
-      }, 1500);
-      timeoutRefs.current.push(happyTimeout);
+      // Update session ID if provided
+      if (response.session_id && !sessionId) {
+        setSessionId(response.session_id);
+      }
+
+      // Store analysis for later display (only show at end)
+      if (response.analysis && lastQuestionText && messageText) {
+        const questionText = lastQuestionText;
+        const answerText = messageText;
+
+        setAnswerAnalyses(prev => {
+          // Avoid duplicates
+          const exists = prev.some(
+            a => a.answer === answerText && a.question === questionText
+          );
+          if (exists) return prev;
+
+          return [
+            ...prev,
+            {
+              question: questionText,
+              answer: answerText,
+              analysis: response.analysis,
+            },
+          ];
+        });
+      }
+
+      // Update scores if provided (but don't display during interview)
+      if (response.scores) {
+        setScores(response.scores);
+      }
+
+      // Check if interview is finished
+      if (response.finished) {
+        setFinished(true);
+        // Use the best emoji when the interview is fully finished
+        changeEmoji("perfect");
+      } else {
+        // Change emoji based on answer quality – only once per answer, using new 5–25 grading system
+        if (response.analysis && response.analysis.scores) {
+          const totalScore = response.analysis.scores.total_score || 0;
+          // New grading system mapping:
+          // 22–25: Excellent  -> 😇 (perfect)
+          // 17–21: Good       -> ☺️ (good)
+          // 12–16: Average    -> 😕 (bad)
+          //  5–11: Weak/Poor  -> 😟 (worst)
+          if (totalScore >= 22) {
+            changeEmoji("perfect");
+          } else if (totalScore >= 17) {
+            changeEmoji("good");
+          } else if (totalScore >= 12) {
+            changeEmoji("bad");
+          } else {
+            changeEmoji("worst");
+          }
+        } else {
+          changeEmoji("default");
+        }
+      }
+
+      // Add AI response message (just the question, no analysis during interview)
+      if (response.content) {
+        const newAiMessage: Message = {
+          id: messages.length + 2,
+          text: response.content,
+          sender: "ai",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, newAiMessage]);
+      }
+
+      // AI has finished responding for this turn
+      setIsTyping(false);
     } catch (error) {
       setIsTyping(false);
-      changeEmoji("happy");
-      
+      changeEmoji("default");
+
       const errorMessage: Message = {
         id: messages.length + 2,
         text: `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -288,6 +439,31 @@ export default function Chat() {
               </div>
             </div>
 
+            {/* Scores Display - Only show at the end */}
+            {finished && scores && (
+              <div className="w-full mb-4 sm:mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 sm:p-4 border-2 border-blue-200">
+                <h4 className="font-semibold text-gray-800 text-xs sm:text-sm mb-2">Final Risk Scores</h4>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Academic:</span>
+                    <span className="font-medium">{scores.academic}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Financial:</span>
+                    <span className="font-medium">{scores.financial}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Intent:</span>
+                    <span className="font-medium">{scores.intent_to_return}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-blue-200 pt-1.5">
+                    <span className="text-gray-800 font-semibold">Overall:</span>
+                    <span className="font-bold text-indigo-600">{scores.overall_risk}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Tips Section */}
             <div className="w-full bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 sm:p-4 border-2 border-yellow-200">
               <div className="flex items-start gap-2">
@@ -343,11 +519,10 @@ export default function Chat() {
                   style={{ animationDelay: `${index * 0.05}s` }}
                 >
                   <div
-                    className={`max-w-[85%] sm:max-w-[80%] rounded-xl sm:rounded-2xl px-4 sm:px-6 py-3 sm:py-4 shadow-md transition-all hover:shadow-lg ${
-                      message.sender === "ai"
-                        ? "bg-white text-gray-800 border-2 border-indigo-100"
-                        : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
-                    }`}
+                    className={`max-w-[85%] sm:max-w-[80%] rounded-xl sm:rounded-2xl px-4 sm:px-6 py-3 sm:py-4 shadow-md transition-all hover:shadow-lg ${message.sender === "ai"
+                      ? "bg-white text-gray-800 border-2 border-indigo-100"
+                      : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+                      }`}
                   >
                     {message.sender === "ai" && (
                       <div className="flex items-center gap-2 mb-1 sm:mb-2">
@@ -359,6 +534,38 @@ export default function Chat() {
                   </div>
                 </div>
               ))}
+
+              {/* Final per-answer analysis cards */}
+              {finished && answerAnalyses.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-700 flex items-center gap-2">
+                    <span>📊 Interview Results</span>
+                  </h3>
+                  {answerAnalyses.map((item, index) =>
+                    item.analysis ? (
+                      <div
+                        key={`${index}-${item.question}-${item.answer}`}
+                        className="space-y-2"
+                      >
+                        <div className="text-xs sm:text-sm text-gray-600">
+                          <div className="font-semibold">
+                            Question {index + 1}:
+                          </div>
+                          <div className="mt-0.5">{item.question}</div>
+                          <div className="mt-1">
+                            <span className="font-semibold">Your Answer:</span>{" "}
+                            <span className="italic">"{item.answer}"</span>
+                          </div>
+                        </div>
+                        <AnswerFeedbackCard
+                          analysis={item.analysis as any}
+                          questionNumber={index + 1}
+                        />
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
 
               {/* Typing Indicator */}
               {isTyping && (
@@ -397,8 +604,9 @@ export default function Chat() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Type your response here..."
-                  className="flex-1 px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base transition-all text-gray-900 min-h-[44px]"
+                  placeholder={finished ? "Interview completed" : "Type your answer here..."}
+                  disabled={finished}
+                  className="flex-1 px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base transition-all text-gray-900 min-h-[44px] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
                 <button
                   type="submit"

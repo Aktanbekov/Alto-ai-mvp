@@ -6,6 +6,7 @@ import (
 	"altoai_mvp/internal/middleware"
 	"altoai_mvp/internal/repository"
 	"altoai_mvp/internal/services"
+	"altoai_mvp/interview"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,18 @@ func New() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestLogger())
+
+	// Load interview questions
+	questionsPath := "./interview/questions.json"
+	if _, err := os.Stat(questionsPath); err == nil {
+		if err := interview.LoadQuestions(questionsPath); err != nil {
+			log.Printf("Warning: Failed to load interview questions: %v", err)
+		} else {
+			log.Printf("Loaded %d interview questions", len(interview.Questions))
+		}
+	} else {
+		log.Printf("Warning: Interview questions file not found at %s", questionsPath)
+	}
 
 	// wiring (DI)
 	// Use PostgreSQL repository
@@ -74,6 +87,13 @@ func New() *gin.Engine {
 		v1.PUT("/users/:id", userH.Update)
 		v1.DELETE("/users/:id", userH.Delete)
 		v1.POST("/chat", chatH.Chat)
+
+		// Interview endpoints
+		interviewGroup := v1.Group("/interview")
+		{
+			interviewGroup.POST("/sessions", interview.CreateSessionHandler)
+			interviewGroup.POST("/sessions/:id/answer", interview.SubmitAnswerHandler)
+		}
 	}
 
 	// Serve static files from frontend/dist (for production)
