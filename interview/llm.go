@@ -24,9 +24,9 @@ func GetAnalyzer() *VisaAnalyzer {
 	return analyzer
 }
 
-// AnalyzeAnswer analyzes a question-answer pair using the VisaAnalyzer
+// AnalyzeAnswer analyzes a question-answer pair using the VisaAnalyzer with session context
 // This replaces the old CallLLM function and provides detailed feedback
-func AnalyzeAnswer(q Question, answer string) (*AnalysisResponse, error) {
+func AnalyzeAnswer(session *Session, q Question, answer string) (*AnalysisResponse, error) {
 	va := GetAnalyzer()
 	if va == nil {
 		return nil, ErrAnalyzerNotInitialized
@@ -34,13 +34,13 @@ func AnalyzeAnswer(q Question, answer string) (*AnalysisResponse, error) {
 	if va.apiKey == "" {
 		return nil, fmt.Errorf("API key not set for analyzer")
 	}
-	return va.AnalyzeAnswer(q.Text, answer)
+	return va.AnalyzeAnswerWithSession(session, q.Text, answer)
 }
 
 // CallLLM is kept for backward compatibility but now uses the new analyzer
 // Deprecated: Use AnalyzeAnswer instead
-func CallLLM(q Question, answer string) (*EvalResult, error) {
-	analysis, err := AnalyzeAnswer(q, answer)
+func CallLLM(session *Session, q Question, answer string) (*EvalResult, error) {
+	analysis, err := AnalyzeAnswer(session, q, answer)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func ConvertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
 // convertAnalysisToEval converts the new AnalysisResponse to the old EvalResult format
 // This allows backward compatibility with existing code
 func convertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
-	// New grading system: scores are on a 5–25 scale (via AnalysisScores.TotalScore)
+	// New grading system: scores are on a 3–15 scale (via AnalysisScores.TotalScore)
 	// We convert this to a 0–100 percentage using ScoreToPercentage, then to 0–10 buckets.
 
 	// Safeguard if scores are missing
@@ -78,7 +78,7 @@ func convertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
 	}
 
 	// Map criteria scores (1–5) to 0–10 scale using simple *2 scaling
-	clarity := analysis.Scores.AnswerQuality * 2
+	clarity := analysis.Scores.AnswerLength * 2
 	if clarity > 10 {
 		clarity = 10
 	}

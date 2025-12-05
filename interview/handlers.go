@@ -92,8 +92,8 @@ func SubmitAnswerHandler(c *gin.Context) {
 	}
 	s.Answers = append(s.Answers, answer)
 
-	// Call AI evaluator
-	eval, err := CallLLM(currentQ, req.Answer)
+	// Call AI evaluator with session context
+	eval, err := CallLLM(s, currentQ, req.Answer)
 	if err != nil {
 		// You can log and degrade gracefully to rule based only
 		eval = nil

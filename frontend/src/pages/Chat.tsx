@@ -42,11 +42,9 @@ interface InterviewScores {
 }
 
 interface AnalysisScores {
+  migration_intent: number;
   goal_understanding: number;
-  logical_mindset: number;
-  no_migration_intent: number;
-  no_hate_to_home_country: number;
-  answer_quality: number;
+  answer_length: number;
   total_score: number;
 }
 
@@ -249,15 +247,15 @@ export default function Chat() {
         if (response.analysis && response.analysis.scores) {
           const totalScore = response.analysis.scores.total_score || 0;
           // New grading system mapping:
-          // 22–25: Excellent  -> 😇 (perfect)
-          // 17–21: Good       -> ☺️ (good)
-          // 12–16: Average    -> 😕 (bad)
-          //  5–11: Weak/Poor  -> 😟 (worst)
-          if (totalScore >= 22) {
+          // 15: Excellent     -> 😇 (perfect)
+          // 13–14: Good       -> ☺️ (good)
+          // 11–12: Average    -> 😕 (bad)
+          //  3–10: Weak       -> 😟 (worst)
+          if (totalScore === 15) {
             changeEmoji("perfect");
-          } else if (totalScore >= 17) {
+          } else if (totalScore >= 13) {
             changeEmoji("good");
-          } else if (totalScore >= 12) {
+          } else if (totalScore >= 11) {
             changeEmoji("bad");
           } else {
             changeEmoji("worst");

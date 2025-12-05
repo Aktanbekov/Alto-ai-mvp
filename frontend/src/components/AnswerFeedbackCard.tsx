@@ -1,11 +1,9 @@
 import React from "react";
 
 interface AnalysisScores {
+  migration_intent: number;
   goal_understanding: number;
-  logical_mindset: number;
-  no_migration_intent: number;
-  no_hate_to_home_country: number;
-  answer_quality: number;
+  answer_length: number;
   total_score: number;
 }
 
@@ -30,7 +28,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
 
   const { scores, classification, feedback } = analysis;
   const totalScore = scores.total_score || 0;
-  const percentage = ((totalScore - 5) / 20) * 100;
+  const percentage = ((totalScore - 3) / 12) * 100;
 
   const getClassificationStyle = () => {
     const lowerClass = classification?.toLowerCase() || "";
@@ -39,7 +37,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
         gradient: "from-green-500 to-emerald-600",
         bg: "bg-green-50",
         border: "border-green-200",
-        emoji: "🎉",
+        emoji: "😇",
         badgeBg: "bg-green-100",
         badgeText: "text-green-800",
         progressBar: "bg-green-500",
@@ -50,7 +48,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
         gradient: "from-blue-500 to-indigo-600",
         bg: "bg-blue-50",
         border: "border-blue-200",
-        emoji: "👍",
+        emoji: "☺️",
         badgeBg: "bg-blue-100",
         badgeText: "text-blue-800",
         progressBar: "bg-blue-500",
@@ -61,7 +59,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
         gradient: "from-yellow-500 to-orange-500",
         bg: "bg-yellow-50",
         border: "border-yellow-200",
-        emoji: "📝",
+        emoji: "😕",
         badgeBg: "bg-yellow-100",
         badgeText: "text-yellow-800",
         progressBar: "bg-yellow-500",
@@ -72,7 +70,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
         gradient: "from-orange-500 to-red-500",
         bg: "bg-orange-50",
         border: "border-orange-200",
-        emoji: "⚠️",
+        emoji: "😟",
         badgeBg: "bg-orange-100",
         badgeText: "text-orange-800",
         progressBar: "bg-orange-500",
@@ -101,11 +99,9 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
     keyof AnalysisScores,
     { label: string; icon: string }
   > = {
+    migration_intent: { label: "Intent", icon: "🏠" },
     goal_understanding: { label: "Goal", icon: "🎯" },
-    logical_mindset: { label: "Logic", icon: "🧠" },
-    no_migration_intent: { label: "Intent", icon: "🏠" },
-    no_hate_to_home_country: { label: "Respect", icon: "❤️" },
-    answer_quality: { label: "Quality", icon: "✨" },
+    answer_length: { label: "Length", icon: "📏" },
     total_score: { label: "Total", icon: "📊" },
   };
 
@@ -137,7 +133,7 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
             </div>
             <div className="text-right">
               <div className="text-3xl font-bold">{totalScore}</div>
-              <div className="text-sm opacity-90">/25</div>
+              <div className="text-sm opacity-90">/15</div>
             </div>
           </div>
         </div>
@@ -153,14 +149,12 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
         {/* Content */}
         <div className="p-4">
           {/* Score Breakdown */}
-          <div className="grid grid-cols-5 gap-2 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-4">
             {(
               [
+                "migration_intent",
                 "goal_understanding",
-                "logical_mindset",
-                "no_migration_intent",
-                "no_hate_to_home_country",
-                "answer_quality",
+                "answer_length",
               ] as (keyof AnalysisScores)[]
             ).map((key) => {
               const meta = criteriaLabels[key];
@@ -219,5 +213,6 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
 };
 
 export default AnswerFeedbackCard;
+
 
 

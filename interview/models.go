@@ -55,14 +55,12 @@ type Session struct {
 	Summary *SessionSummary `json:"summary,omitempty"`
 }
 
-// AnalysisScores represents the 5–25 grading system for a single answer
+// AnalysisScores represents the 3–15 grading system for a single answer
 type AnalysisScores struct {
-	GoalUnderstanding   int `json:"goal_understanding"`      // 1–5
-	LogicalMindset      int `json:"logical_mindset"`         // 1–5
-	NoMigrationIntent   int `json:"no_migration_intent"`     // 1–5
-	NoHateToHomeCountry int `json:"no_hate_to_home_country"` // 1–5
-	AnswerQuality       int `json:"answer_quality"`          // 1–5
-	TotalScore          int `json:"total_score"`             // 5–25 (sum of all criteria)
+	MigrationIntent   int `json:"migration_intent"`   // 1–5
+	GoalUnderstanding int `json:"goal_understanding"` // 1–5
+	AnswerLength      int `json:"answer_length"`      // 1–5
+	TotalScore        int `json:"total_score"`        // 3–15 (sum of all criteria)
 }
 
 // AnalysisResponse contains detailed analysis of a single answer (new grading system)

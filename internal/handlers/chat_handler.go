@@ -197,8 +197,8 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 		CreatedAt:    time.Now(),
 	}
 
-	// Call new analyzer for detailed feedback
-	analysis, err := interview.AnalyzeAnswer(currentQ, lastUserMessage)
+	// Call new analyzer for detailed feedback with session context
+	analysis, err := interview.AnalyzeAnswer(session, currentQ, lastUserMessage)
 	if err != nil {
 		// Log error for debugging
 		log.Printf("Error analyzing answer: %v", err)
