@@ -48,10 +48,22 @@ interface AnalysisScores {
   total_score: number;
 }
 
+interface FeedbackByCriterion {
+  migration_intent: string;
+  goal_understanding: string;
+  answer_length: string;
+}
+
+interface StructuredFeedback {
+  overall: string;
+  by_criterion: FeedbackByCriterion;
+  improvements: string[];
+}
+
 interface ChatAnalysis {
   scores: AnalysisScores;
   classification: string;
-  feedback: string;
+  feedback: StructuredFeedback;
 }
 
 interface ChatResponse {
@@ -156,15 +168,66 @@ export default function Chat() {
     setEmojiState(state);
   };
 
+  // Validate user input before sending
+  const validateAnswer = (answer: string): { valid: boolean; error?: string } => {
+    const trimmed = answer.trim();
+    
+    // Check if empty
+    if (!trimmed) {
+      return { valid: false, error: "Your answer is too short." };
+    }
+
+    // Check for obvious misspellings or gibberish
+    // - Too many repeated characters (e.g., "aaaaaa", "testtttt")
+    const hasRepeatedChars = /(.)\1{4,}/.test(trimmed);
+    if (hasRepeatedChars) {
+      return { valid: false, error: "Your answer is too short." };
+    }
+
+    return { valid: true };
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputValue.trim() || finished) return;
 
+    const messageText = inputValue.trim();
+
+    // Validate the answer before sending
+    const validation = validateAnswer(messageText);
+    if (!validation.valid) {
+      // Get the last question BEFORE adding error message
+      const aiMessages = messages.filter(m => m.sender === "ai");
+      const lastQuestion = aiMessages[aiMessages.length - 1];
+      
+      // Show simple error message
+      const errorMessage: Message = {
+        id: messages.length + 1,
+        text: "Your answer is too short.",
+        sender: "ai",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      
+      // Resend the question if we found one
+      if (lastQuestion && lastQuestion.text !== "Your answer is too short.") {
+        const resendQuestion: Message = {
+          id: messages.length + 2,
+          text: lastQuestion.text,
+          sender: "ai",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, resendQuestion]);
+      }
+      
+      // Clear input but don't send to API
+      setInputValue("");
+      return;
+    }
+
     // Clear any existing timeouts to prevent double updates
     timeoutRefs.current.forEach((timeout) => clearTimeout(timeout));
     timeoutRefs.current = [];
-
-    const messageText = inputValue.trim();
 
     // Add user message
     const newUserMessage: Message = {
@@ -332,6 +395,66 @@ export default function Chat() {
     }
   };
 
+  const handleRestartInterview = async () => {
+    if (window.confirm("Are you sure you want to restart the interview? This will start a new session.")) {
+      // Reset all state
+      setMessages([]);
+      setInputValue("");
+      setEmojiState("default");
+      setIsTyping(false);
+      setSessionId(null);
+      setScores(null);
+      setFinished(false);
+      setAnswerAnalyses([]);
+      
+      // Clear any timeouts
+      timeoutRefs.current.forEach((timeout) => clearTimeout(timeout));
+      timeoutRefs.current = [];
+
+      // Initialize new interview
+      try {
+        setIsTyping(true);
+        changeEmoji("thinking");
+        const response: ChatResponse = await sendChatMessage([], null);
+
+        if (response.session_id) {
+          setSessionId(response.session_id);
+        }
+
+        if (response.content) {
+          const initialMessage: Message = {
+            id: 1,
+            sender: "ai",
+            text: response.content,
+            timestamp: new Date(),
+          };
+          setMessages([initialMessage]);
+        }
+
+        if (response.scores) {
+          setScores(response.scores);
+        }
+
+        if (response.finished) {
+          setFinished(true);
+        }
+
+        setIsTyping(false);
+        changeEmoji("default");
+      } catch (error) {
+        setIsTyping(false);
+        changeEmoji("default");
+        const errorMessage: Message = {
+          id: 1,
+          text: `Failed to start interview: ${error instanceof Error ? error.message : "Unknown error"}`,
+          sender: "ai",
+          timestamp: new Date(),
+        };
+        setMessages([errorMessage]);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
       {/* Top Navigation Bar */}
@@ -437,29 +560,15 @@ export default function Chat() {
               </div>
             </div>
 
-            {/* Scores Display - Only show at the end */}
-            {finished && scores && (
-              <div className="w-full mb-4 sm:mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 sm:p-4 border-2 border-blue-200">
-                <h4 className="font-semibold text-gray-800 text-xs sm:text-sm mb-2">Final Risk Scores</h4>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Academic:</span>
-                    <span className="font-medium">{scores.academic}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Financial:</span>
-                    <span className="font-medium">{scores.financial}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Intent:</span>
-                    <span className="font-medium">{scores.intent_to_return}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-blue-200 pt-1.5">
-                    <span className="text-gray-800 font-semibold">Overall:</span>
-                    <span className="font-bold text-indigo-600">{scores.overall_risk}</span>
-                  </div>
-                </div>
-              </div>
+
+            {/* Restart Interview Button - Show when finished */}
+            {finished && (
+              <button
+                onClick={handleRestartInterview}
+                className="w-full mb-4 sm:mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-medium text-sm sm:text-base min-h-[44px]"
+              >
+                🔄 Restart Interview
+              </button>
             )}
 
             {/* Tips Section */}

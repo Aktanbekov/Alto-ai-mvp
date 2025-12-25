@@ -83,11 +83,11 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	// If this is a new session, return the first question
 	if isNewSession {
-		currentQ, ok := interview.Questions[session.CurrentQuestion]
-		if !ok {
-			response.Error(c, http.StatusInternalServerError, "initial question not found")
+		if len(session.SelectedQuestions) == 0 {
+			response.Error(c, http.StatusInternalServerError, "no questions selected for session")
 			return
 		}
+		currentQ := session.SelectedQuestions[0]
 
 		response.OK(c, ChatResponse{
 			Content:      currentQ.Text,
@@ -101,8 +101,14 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	// If no messages provided, return current question
 	if len(req.Messages) == 0 {
-		currentQ, ok := interview.Questions[session.CurrentQuestion]
-		if !ok {
+		var currentQ *interview.Question
+		for i, q := range session.SelectedQuestions {
+			if q.ID == session.CurrentQuestion {
+				currentQ = &session.SelectedQuestions[i]
+				break
+			}
+		}
+		if currentQ == nil {
 			response.Error(c, http.StatusInternalServerError, "current question not found")
 			return
 		}
@@ -132,8 +138,14 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	// Get current question
-	currentQ, ok := interview.Questions[session.CurrentQuestion]
-	if !ok {
+	var currentQ *interview.Question
+	for i, q := range session.SelectedQuestions {
+		if q.ID == session.CurrentQuestion {
+			currentQ = &session.SelectedQuestions[i]
+			break
+		}
+	}
+	if currentQ == nil {
 		session.Status = interview.SessionStatusFinished
 		interview.SaveSession(session)
 		response.Error(c, http.StatusInternalServerError, "current question not found")
@@ -151,9 +163,9 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	// If we've already answered this question, just return the next question
 	if alreadyAnswered {
-		// Decide next question (use nil eval since we're not processing a new answer)
-		nextID := currentQ.NextID
-		if nextID == "" || nextID == "end" {
+		// Move to next question
+		session.QuestionIndex++
+		if session.QuestionIndex >= len(session.SelectedQuestions) {
 			session.Status = interview.SessionStatusFinished
 
 			// Generate session summary before completing
@@ -175,10 +187,10 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 		}
 
 		// Update session with next question
-		session.CurrentQuestion = nextID
+		nextQ := session.SelectedQuestions[session.QuestionIndex]
+		session.CurrentQuestion = nextQ.ID
 		interview.SaveSession(session)
 
-		nextQ := interview.Questions[nextID]
 		response.OK(c, ChatResponse{
 			Content:    nextQ.Text,
 			SessionID:  session.ID,
@@ -198,7 +210,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	// Call new analyzer for detailed feedback with session context
-	analysis, err := interview.AnalyzeAnswer(session, currentQ, lastUserMessage)
+	analysis, err := interview.AnalyzeAnswer(session, *currentQ, lastUserMessage)
 	if err != nil {
 		// Log error for debugging
 		log.Printf("Error analyzing answer: %v", err)
@@ -213,7 +225,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	if analysis != nil {
 		answer.Analysis = analysis
 		// Also create EvalResult for backward compatibility with scoring system
-		eval := interview.ConvertAnalysisToEval(analysis, currentQ)
+		eval := interview.ConvertAnalysisToEval(analysis, *currentQ)
 		answer.Eval = eval
 		// Update scores using the converted eval
 		interview.ApplyEval(session, eval)
@@ -221,37 +233,10 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	session.Answers = append(session.Answers, answer)
 
-	// Check if we've reached 12 questions limit
-	if len(session.Answers) >= 12 {
-		session.Status = interview.SessionStatusFinished
-
-		// Generate session summary before completing
-		summary, err := interview.GenerateSessionSummary(session)
-		if err == nil && summary != nil {
-			session.Summary = summary
-		}
-
-		interview.SaveSession(session)
-
-		completionMsg := buildCompletionMessage(session)
-		response.OK(c, ChatResponse{
-			Content:   completionMsg,
-			SessionID: session.ID,
-			Finished:  true,
-			Scores:    &session.Scores,
-			Analysis:  analysis,
-			Grade:     getGradeFromAnalysis(analysis),
-		})
-		return
-	}
-
-	// Decide next question (use eval from analysis if available)
-	var eval *interview.EvalResult
-	if analysis != nil {
-		eval = interview.ConvertAnalysisToEval(analysis, currentQ)
-	}
-	nextID := interview.DecideNextQuestion(currentQ, session, eval)
-	if nextID == "" || nextID == "end" {
+	// Move to next question
+	session.QuestionIndex++
+	if session.QuestionIndex >= len(session.SelectedQuestions) {
+		// All questions answered
 		session.Status = interview.SessionStatusFinished
 
 		// Generate session summary before completing
@@ -275,10 +260,9 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	// Update session with next question
-	session.CurrentQuestion = nextID
+	nextQ := session.SelectedQuestions[session.QuestionIndex]
+	session.CurrentQuestion = nextQ.ID
 	interview.SaveSession(session)
-
-	nextQ := interview.Questions[nextID]
 
 	response.OK(c, ChatResponse{
 		Content:         nextQ.Text,
@@ -352,11 +336,15 @@ func getSuggestionsFromAnalysis(analysis *interview.AnalysisResponse) []string {
 	if analysis == nil {
 		return nil
 	}
-	if strings.TrimSpace(analysis.Feedback) == "" {
-		return nil
+	// Use improvements array from structured feedback
+	if len(analysis.Feedback.Improvements) > 0 {
+		return analysis.Feedback.Improvements
 	}
-	// Use feedback as a single suggestion entry
-	return []string{analysis.Feedback}
+	// Fallback to overall feedback if no improvements
+	if strings.TrimSpace(analysis.Feedback.Overall) != "" {
+		return []string{analysis.Feedback.Overall}
+	}
+	return nil
 }
 
 func getImprovedVersionFromAnalysis(analysis *interview.AnalysisResponse) string {

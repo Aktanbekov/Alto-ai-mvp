@@ -7,10 +7,22 @@ interface AnalysisScores {
   total_score: number;
 }
 
+interface FeedbackByCriterion {
+  migration_intent: string;
+  goal_understanding: string;
+  answer_length: string;
+}
+
+interface StructuredFeedback {
+  overall: string;
+  by_criterion: FeedbackByCriterion;
+  improvements: string[];
+}
+
 interface ChatAnalysis {
   scores: AnalysisScores;
   classification: string;
-  feedback: string;
+  feedback: StructuredFeedback;
 }
 
 interface AnswerFeedbackCardProps {
@@ -29,6 +41,15 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
   const { scores, classification, feedback } = analysis;
   const totalScore = scores.total_score || 0;
   const percentage = ((totalScore - 3) / 12) * 100;
+  
+  // Helper to check if feedback has content
+  const hasFeedback = feedback && (
+    feedback.overall || 
+    feedback.by_criterion?.migration_intent ||
+    feedback.by_criterion?.goal_understanding ||
+    feedback.by_criterion?.answer_length ||
+    (feedback.improvements && feedback.improvements.length > 0)
+  );
 
   const getClassificationStyle = () => {
     const lowerClass = classification?.toLowerCase() || "";
@@ -175,19 +196,69 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
           </div>
 
           {/* Feedback */}
-          {feedback && (
-            <div className="bg-white border-l-4 border-indigo-500 p-3 rounded-lg shadow-sm">
-              <div className="flex items-start gap-2">
-                <span className="text-lg mt-0.5">💡</span>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-1">
-                    FEEDBACK
-                  </p>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {feedback}
-                  </p>
+          {hasFeedback && (
+            <div className="space-y-3">
+              {/* Overall Feedback */}
+              {feedback.overall && (
+                <div className="bg-white border-l-4 border-indigo-500 p-3 rounded-lg shadow-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg mt-0.5">💡</span>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">
+                        OVERALL FEEDBACK
+                      </p>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        {feedback.overall}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Feedback by Criterion */}
+              {(feedback.by_criterion?.migration_intent || 
+                feedback.by_criterion?.goal_understanding || 
+                feedback.by_criterion?.answer_length) && (
+                <div className="bg-white border-l-4 border-blue-500 p-3 rounded-lg shadow-sm">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">
+                    DETAILED FEEDBACK
+                  </p>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    {feedback.by_criterion.migration_intent && (
+                      <div>
+                        <span className="font-medium">Intent: </span>
+                        {feedback.by_criterion.migration_intent}
+                      </div>
+                    )}
+                    {feedback.by_criterion.goal_understanding && (
+                      <div>
+                        <span className="font-medium">Goal: </span>
+                        {feedback.by_criterion.goal_understanding}
+                      </div>
+                    )}
+                    {feedback.by_criterion.answer_length && (
+                      <div>
+                        <span className="font-medium">Length: </span>
+                        {feedback.by_criterion.answer_length}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Improvements */}
+              {feedback.improvements && feedback.improvements.length > 0 && (
+                <div className="bg-white border-l-4 border-green-500 p-3 rounded-lg shadow-sm">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">
+                    SUGGESTIONS FOR IMPROVEMENT
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                    {feedback.improvements.map((improvement, idx) => (
+                      <li key={idx}>{improvement}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>

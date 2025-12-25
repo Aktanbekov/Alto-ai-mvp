@@ -1,17 +1,50 @@
+version: '3.8'
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: altoai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-altoai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-altoai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-altoai_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-altoai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - altoai-network
+
   altoai-mvp:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: altoai-mvp
     ports:
-      - "3000:8080"  # Map host port 3000 to container port 8080
+      - "${APP_PORT:-8080}:8080"
     environment:
       - GIN_MODE=release
-      - FRONTEND_URL=http://localhost:3000
-      - GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL:-http://localhost:8080/auth/google/callback}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-altoai}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-altoai_password}
+      - POSTGRES_DB=${POSTGRES_DB:-altoai_db}
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     env_file:
       - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -19,5 +52,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - altoai-network
 
+volumes:
+  postgres_data:
+    driver: local
 
+networks:
+  altoai-network:
+    driver: bridge

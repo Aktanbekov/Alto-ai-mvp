@@ -1,172 +1,82 @@
-[
-    {
-        "id": "q1_purpose",
-        "category": "Purpose of Study",
-        "text": "Why do you want to study in the United States?",
-        "next_id": "q2_university",
-        "followup_candidates": [
-            "q1f_clarify_purpose"
-        ],
-        "tags": [
-            "purpose",
-            "intent"
-        ]
-    },
-    {
-        "id": "q2_university",
-        "category": "University Choice",
-        "text": "Which university will you be attending in the US?",
-        "next_id": "q3_academic",
-        "followup_candidates": [
-            "q2f_university_exact"
-        ],
-        "tags": [
-            "university",
-            "choice"
-        ]
-    },
-    {
-        "id": "q3_academic",
-        "category": "Academic Background",
-        "text": "What is the name of your previous college or school, and what degree did you earn?",
-        "next_id": "q4_academic_gpa",
-        "followup_candidates": [],
-        "tags": [
-            "academic",
-            "background"
-        ]
-    },
-    {
-        "id": "q4_academic_gpa",
-        "category": "Academic Background",
-        "text": "What was your academic GPA or percentage in your last program of study?",
-        "next_id": "q5_financial",
-        "followup_candidates": [],
-        "tags": [
-            "academic",
-            "gpa"
-        ]
-    },
-    {
-        "id": "q5_financial",
-        "category": "Financial Capability",
-        "text": "How do you plan to finance your education and living expenses in the US?",
-        "next_id": "q6_financial_sponsor",
-        "followup_candidates": [
-            "q5f_finance_clarify",
-            "q6f_finance_detail"
-        ],
-        "tags": [
-            "financial",
-            "funding"
-        ]
-    },
-    {
-        "id": "q6_financial_sponsor",
-        "category": "Financial Capability",
-        "text": "Who is going to sponsor your education?",
-        "next_id": "q7_home_ties",
-        "followup_candidates": [
-            "q5f_finance_clarify",
-            "q6f_finance_detail"
-        ],
-        "tags": [
-            "financial",
-            "sponsor"
-        ]
-    },
-    {
-        "id": "q7_home_ties",
-        "category": "Immigration Intent",
-        "text": "Do you intend to return to your home country after completing your studies?",
-        "next_id": "q8_post_graduation",
-        "followup_candidates": [
-            "q7f_home_country_career",
-            "q8f_ties_detail"
-        ],
-        "tags": [
-            "intent",
-            "return",
-            "immigration"
-        ]
-    },
-    {
-        "id": "q8_post_graduation",
-        "category": "Post-Graduation Plans",
-        "text": "What are your plans after graduation?",
-        "next_id": "end",
-        "followup_candidates": [],
-        "tags": [
-            "post_graduation",
-            "plans"
-        ]
-    },
-    {
-        "id": "q1f_clarify_purpose",
-        "category": "Purpose of Study",
-        "text": "Why can't you continue your education in your home country?",
-        "next_id": "q2_university",
-        "followup_candidates": [],
-        "tags": [
-            "purpose",
-            "clarify"
-        ]
-    },
-    {
-        "id": "q2f_university_exact",
-        "category": "University Choice",
-        "text": "Why did you choose this university for your studies?",
-        "next_id": "q3_academic",
-        "followup_candidates": [],
-        "tags": [
-            "university",
-            "clarify"
-        ]
-    },
-    {
-        "id": "q5f_finance_clarify",
-        "category": "Financial Capability",
-        "text": "What is your sponsor's annual income?",
-        "next_id": "q6_financial_sponsor",
-        "followup_candidates": [],
-        "tags": [
-            "financial",
-            "clarify"
-        ]
-    },
-    {
-        "id": "q6f_finance_detail",
-        "category": "Financial Capability",
-        "text": "Do you have bank statements to show your available funds?",
-        "next_id": "q7_home_ties",
-        "followup_candidates": [],
-        "tags": [
-            "financial",
-            "detail"
-        ]
-    },
-    {
-        "id": "q7f_home_country_career",
-        "category": "Immigration Intent",
-        "text": "What are your career goals back home after completing your studies?",
-        "next_id": "q8_post_graduation",
-        "followup_candidates": [],
-        "tags": [
-            "intent",
-            "career",
-            "clarify"
-        ]
-    },
-    {
-        "id": "q8f_ties_detail",
-        "category": "Immigration Intent",
-        "text": "How can you prove that you will return home after finishing your studies?",
-        "next_id": "q8_post_graduation",
-        "followup_candidates": [],
-        "tags": [
-            "intent",
-            "ties",
-            "clarify"
-        ]
-    }
-]
+{
+    "Purpose of Study": [
+        "Why do you want to study in the United States?",
+        "Why not study in your home country or other countries, like Canada or the UK or Europe?",
+        "Which university will you be attending in the US?",
+        "Have you been to the United States before?"
+    ],
+    "Academic Background": [
+        "What is the name of your previous college or school, and what degree did you earn?",
+        "What was your academic GPA or percentage in your last program of study?",
+        "What are your test scores (e.g., GRE, GMAT, TOEFL, IELTS)?",
+        "How good is your English (language proficiency)?",
+        "Why are you planning to continue your education (instead of working)?",
+        "Who is your current employer, and what is your job there?",
+        "Why do you want to pursue a graduate degree (Master’s or Ph.D.) at this time?",
+        "What will be your major or field of study in the US?",
+        "Can you provide your work experience certificate or CV for review?",
+        "How will you manage the cultural and educational differences in the U.S.?",
+        "How will this study program relate to your past work or studies?",
+        "Why did you choose this specific course or major?",
+        "What do you know about the U.S. education system or universities?",
+        "Could you explain your academic background (your prior degrees and achievements)?"
+    ],
+    "University Choice": [
+        "Why did you choose this university for your studies?",
+        "How many universities did you apply to?",
+        "Which universities accepted your application?",
+        "Which universities rejected you?",
+        "Where is your university located in the US?",
+        "Do you know any professors or current students at this university?",
+        "This program is offered at other universities too — why not attend one of those?",
+        "Where will you be living in the US (on-campus or off-campus)?"
+    ],
+    "Financial Capability": [
+        "How do you plan to finance your education and living expenses in the US?",
+        "Who is going to sponsor your education?",
+        "What is your sponsor’s annual income?",
+        "What is your monthly income (current earnings)?",
+        "What is your current salary?",
+        "How much does your school program cost per year?",
+        "How will you meet these expenses?",
+        "Are you receiving any scholarship from the university, and if so, how much?",
+        "Are you going to take an education loan for your studies?",
+        "Has your education loan been approved?",
+        "Do you have bank statements to show your available funds?",
+        "If your program lasts multiple years, how will you fund the entire duration of your studies?",
+        "How will you cover any remaining costs if your sponsor cannot cover everything?",
+        "Do you plan to work while studying in the US (e.g., on-campus job)?"
+    ],
+    "Family/Sponsor Info": [
+        "Are any of your siblings living in the United States?",
+        "Do you have any other relatives (aunts, uncles, etc.) in the United States?",
+        "Why is your sibling in the US, and what do they do there?",
+        "Which city is your sibling in, and how long have they been in the US?",
+        "What do your parents do for a living (occupation)?",
+        "How long have your parents been working at their current jobs?"
+    ],
+    "Post-Graduation Plans": [
+        "What are your plans after graduation?",
+        "Do you have a job or career in mind after you graduate?",
+        "What are your career goals back home after completing your studies?",
+        "Do you plan to stay in the US and work after graduation?",
+        "Will you continue to work for your current employer after you graduate?",
+        "Do you plan to pursue further studies, like a Ph.D., after completing this program?",
+        "If you don’t find a job in the US after graduation and have to return home, what will you do?",
+        "How will this degree contribute to your career growth or future opportunities?"
+    ],
+    "Immigration Intent": [
+        "Do you intend to return to your home country after completing your studies?",
+        "How can you prove that you will return home after finishing your studies?",
+        "Do you plan to immigrate to the United States permanently, or will you return home?",
+        "How long do you plan to stay in the United States?",
+        "Do you have any friends in the United States?",
+        "Do you plan to work in the U.S. after graduation?",
+        "What are your plans after graduation?",
+        "If you don’t find a job in the US after graduation, what will you do?",
+        "How will this degree help your career back home?",
+        "Do you want to get a intership in the US after graduation?",
+        "Will you return to your home country during school breaks or vacations?",
+        "Why should the consulate grant you an F-1 student visa?"
+    ]
+}

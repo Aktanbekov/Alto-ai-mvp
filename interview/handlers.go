@@ -18,16 +18,16 @@ func CreateSessionHandler(c *gin.Context) {
 	s := NewSession("")
 	SaveSession(s)
 
-	q, ok := Questions[s.CurrentQuestion]
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "initial question not found"})
+	if len(s.SelectedQuestions) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "no questions selected for session"})
 		return
 	}
 
+	firstQ := s.SelectedQuestions[0]
 	resp := CreateSessionResponse{
 		SessionID:    s.ID,
-		QuestionID:   q.ID,
-		QuestionText: q.Text,
+		QuestionID:   firstQ.ID,
+		QuestionText: firstQ.Text,
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -75,8 +75,16 @@ func SubmitAnswerHandler(c *gin.Context) {
 		return
 	}
 
-	currentQ, ok := Questions[s.CurrentQuestion]
-	if !ok {
+	// Find current question in selected questions
+	var currentQ *Question
+	for i, q := range s.SelectedQuestions {
+		if q.ID == s.CurrentQuestion {
+			currentQ = &s.SelectedQuestions[i]
+			break
+		}
+	}
+
+	if currentQ == nil {
 		s.Status = SessionStatusFinished
 		SaveSession(s)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "current question not found"})
@@ -93,7 +101,7 @@ func SubmitAnswerHandler(c *gin.Context) {
 	s.Answers = append(s.Answers, answer)
 
 	// Call AI evaluator with session context
-	eval, err := CallLLM(s, currentQ, req.Answer)
+	eval, err := CallLLM(s, *currentQ, req.Answer)
 	if err != nil {
 		// You can log and degrade gracefully to rule based only
 		eval = nil
@@ -106,9 +114,10 @@ func SubmitAnswerHandler(c *gin.Context) {
 	// Update scores
 	ApplyEval(s, eval)
 
-	// Decide next question
-	nextID := DecideNextQuestion(currentQ, s, eval)
-	if nextID == "" || nextID == "end" {
+	// Move to next question
+	s.QuestionIndex++
+	if s.QuestionIndex >= len(s.SelectedQuestions) {
+		// All questions answered
 		s.Status = SessionStatusFinished
 		SaveSession(s)
 		resp := SubmitAnswerResponse{
@@ -120,10 +129,11 @@ func SubmitAnswerHandler(c *gin.Context) {
 		return
 	}
 
-	s.CurrentQuestion = nextID
+	// Set next question
+	nextQ := s.SelectedQuestions[s.QuestionIndex]
+	s.CurrentQuestion = nextQ.ID
 	SaveSession(s)
 
-	nextQ := Questions[nextID]
 	resp := SubmitAnswerResponse{
 		NextQuestionID:   nextQ.ID,
 		NextQuestionText: nextQ.Text,

@@ -100,13 +100,14 @@ func convertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
 	suggestedFollowup := ""
 	if needsFollowup {
 		// Use feedback text to guess the main followup area
-		if contains(analysis.Feedback, "purpose", "study", "why", "goal") {
+		feedbackText := analysis.Feedback.Overall + " " + analysis.Feedback.ByCriterion.GoalUnderstanding
+		if contains(feedbackText, "purpose", "study", "why", "goal") {
 			suggestedFollowup = "clarify_purpose"
-		} else if contains(analysis.Feedback, "university", "school", "college", "program") {
+		} else if contains(feedbackText, "university", "school", "college", "program") {
 			suggestedFollowup = "clarify_university"
-		} else if contains(analysis.Feedback, "financial", "money", "fund", "sponsor", "income") {
+		} else if contains(feedbackText, "financial", "money", "fund", "sponsor", "income") {
 			suggestedFollowup = "clarify_financial"
-		} else if contains(analysis.Feedback, "home", "country", "return", "ties", "family") {
+		} else if contains(feedbackText, "home", "country", "return", "ties", "family") {
 			suggestedFollowup = "clarify_home_ties"
 		}
 	}
@@ -141,8 +142,8 @@ func convertAnalysisToEval(analysis *AnalysisResponse, q Question) *EvalResult {
 	if strings.TrimSpace(analysis.Classification) != "" {
 		flags = append(flags, "classification:"+analysis.Classification)
 	}
-	if strings.TrimSpace(analysis.Feedback) != "" {
-		flags = append(flags, "feedback:"+analysis.Feedback)
+	if strings.TrimSpace(analysis.Feedback.Overall) != "" {
+		flags = append(flags, "feedback:"+analysis.Feedback.Overall)
 	}
 
 	return &EvalResult{

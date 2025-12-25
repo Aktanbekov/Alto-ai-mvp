@@ -23,7 +23,7 @@ func init() {
 func main() {
 	r := router.New()
 
-	handler := middleware.CORS(r)
+	handler := middleware.CORSLegacy(r)
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      handler,

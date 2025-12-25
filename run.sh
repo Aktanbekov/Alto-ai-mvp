@@ -1,5 +1,16 @@
 #!/bin/bash
 
+echo "🧪 Running tests before starting servers..."
+
+# Run Go tests from tests folder
+echo "📝 Running Go tests..."
+if ! go test ./tests/... -v; then
+    echo "❌ Tests failed! Fix the issues before starting servers."
+    exit 1
+fi
+
+echo "✅ All tests passed!"
+echo ""
 echo "🔄 Restarting backend and frontend..."
 
 # Function to kill process on a port

@@ -4,24 +4,17 @@
 .gitattributes
 
 # Documentation
-README.md
-README
+*.md
+README*
 LICENSE
+DOCKER.md
+RUN_DOCKER.md
+TEST_SUMMARY.md
 
-# Development files
+# Environment files (should be passed via env_file or environment)
 .env
-.env.local
-.env.*.local
-
-# Node modules (will be installed in container)
-node_modules
-frontend/node_modules
-
-# Build artifacts
-frontend/dist
-*.exe
-*.test
-*.out
+.env.*
+!.env.example
 
 # IDE
 .vscode
@@ -34,23 +27,31 @@ frontend/dist
 .DS_Store
 Thumbs.db
 
-# Logs
+# Node modules (will be installed in container)
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+frontend/dist/
 *.log
-logs
 
 # Test files
+tests/
 ai_tests/
+*.test.go
 *_test.go
-test.go
-
-# Temporary files
-tmp/
-temp/
-*.tmp
 
 # Docker
-Dockerfile
+Dockerfile*
+docker-compose*.yml
 .dockerignore
-docker-compose.yml
 
+# CI/CD
+.github/
+.gitlab-ci.yml
 
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/

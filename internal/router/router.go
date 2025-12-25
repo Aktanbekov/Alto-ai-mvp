@@ -18,7 +18,7 @@ import (
 func New() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.RequestLogger())
+	r.Use(middleware.CORS(), gin.Recovery(), middleware.RequestLogger())
 
 	// Load interview questions
 	questionsPath := "./interview/questions.json"
@@ -26,7 +26,12 @@ func New() *gin.Engine {
 		if err := interview.LoadQuestions(questionsPath); err != nil {
 			log.Printf("Warning: Failed to load interview questions: %v", err)
 		} else {
-			log.Printf("Loaded %d interview questions", len(interview.Questions))
+			totalQuestions := 0
+			for _, questions := range interview.QuestionsByCategory {
+				totalQuestions += len(questions)
+			}
+			log.Printf("Loaded interview questions from %d categories (total: %d questions)", 
+				len(interview.QuestionsByCategory), totalQuestions)
 		}
 	} else {
 		log.Printf("Warning: Interview questions file not found at %s", questionsPath)

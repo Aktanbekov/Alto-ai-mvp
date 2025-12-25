@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const FirstQuestionID = "q1_purpose"
-
 var (
 	sessions   = make(map[string]*Session)
 	sessionsMu sync.RWMutex
@@ -16,16 +14,28 @@ var (
 
 func NewSession(userID string) *Session {
 	now := time.Now()
-	return &Session{
-		ID:              uuid.NewString(),
-		UserID:          userID,
-		CurrentQuestion: FirstQuestionID,
-		Answers:         []Answer{},
-		Scores:          Scores{},
-		Status:          SessionStatusActive,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+	
+	// Select questions for this session
+	selectedQuestions := SelectQuestionsForSession()
+	
+	session := &Session{
+		ID:               uuid.NewString(),
+		UserID:           userID,
+		SelectedQuestions: selectedQuestions,
+		QuestionIndex:    0,
+		Answers:          []Answer{},
+		Scores:           Scores{},
+		Status:           SessionStatusActive,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
+	
+	// Set current question to first selected question
+	if len(selectedQuestions) > 0 {
+		session.CurrentQuestion = selectedQuestions[0].ID
+	}
+	
+	return session
 }
 
 func SaveSession(s *Session) {

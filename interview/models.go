@@ -43,14 +43,16 @@ const (
 
 // Session holds the state of one full interview attempt.
 type Session struct {
-	ID              string        `json:"id"`
-	UserID          string        `json:"user_id,omitempty"` // if you later have accounts
-	CurrentQuestion string        `json:"current_question"`
-	Answers         []Answer      `json:"answers"`
-	Scores          Scores        `json:"scores"`
-	Status          SessionStatus `json:"status"`
-	CreatedAt       time.Time     `json:"created_at"`
-	UpdatedAt       time.Time     `json:"updated_at"`
+	ID                string        `json:"id"`
+	UserID            string        `json:"user_id,omitempty"`  // if you later have accounts
+	CurrentQuestion   string        `json:"current_question"`   // question ID
+	SelectedQuestions []Question    `json:"selected_questions"` // questions selected for this session
+	QuestionIndex     int           `json:"question_index"`     // current question index in SelectedQuestions
+	Answers           []Answer      `json:"answers"`
+	Scores            Scores        `json:"scores"`
+	Status            SessionStatus `json:"status"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
 	// Session summary for completed interviews
 	Summary *SessionSummary `json:"summary,omitempty"`
 }
@@ -63,11 +65,25 @@ type AnalysisScores struct {
 	TotalScore        int `json:"total_score"`        // 3–15 (sum of all criteria)
 }
 
+// FeedbackByCriterion contains feedback for each scoring criterion
+type FeedbackByCriterion struct {
+	MigrationIntent   string `json:"migration_intent"`
+	GoalUnderstanding string `json:"goal_understanding"`
+	AnswerLength      string `json:"answer_length"`
+}
+
+// StructuredFeedback contains detailed feedback in the new format
+type StructuredFeedback struct {
+	Overall      string              `json:"overall"`
+	ByCriterion  FeedbackByCriterion `json:"by_criterion"`
+	Improvements []string            `json:"improvements"`
+}
+
 // AnalysisResponse contains detailed analysis of a single answer (new grading system)
 type AnalysisResponse struct {
-	Scores         AnalysisScores `json:"scores"`
-	Classification string         `json:"classification"` // Excellent, Good, Average, Weak, Poor
-	Feedback       string         `json:"feedback"`       // 1–2 sentences of feedback
+	Scores         AnalysisScores     `json:"scores"`
+	Classification string             `json:"classification"` // Excellent, Good, Average, Weak
+	Feedback       StructuredFeedback `json:"feedback"`       // Structured feedback with overall, by_criterion, and improvements
 }
 
 // AnalysisRecord stores a complete analysis record
