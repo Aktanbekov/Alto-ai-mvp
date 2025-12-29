@@ -133,28 +133,22 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
       >
         {/* Header */}
         <div className={`bg-gradient-to-r ${style.gradient} p-4 text-white`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">{style.emoji}</span>
-              <div>
-                <div className="flex items-center gap-2">
-                  {questionNumber && (
-                    <span className="bg-white bg-opacity-30 px-2 py-0.5 rounded-full text-xs font-bold">
-                      Q{questionNumber}
-                    </span>
-                  )}
-                  <span
-                    className={`${style.badgeBg} ${style.badgeText} px-3 py-1 rounded-full text-xs font-bold`}
-                  >
-                    {classification}
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{style.emoji}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                {questionNumber && (
+                  <span className="bg-white bg-opacity-30 px-2 py-0.5 rounded-full text-xs font-bold">
+                    Q{questionNumber}
                   </span>
-                </div>
-                <p className="text-sm opacity-90 mt-1">Answer Analysis</p>
+                )}
+                <span
+                  className={`${style.badgeBg} ${style.badgeText} px-3 py-1 rounded-full text-xs font-bold`}
+                >
+                  {classification}
+                </span>
               </div>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold">{totalScore}</div>
-              <div className="text-sm opacity-90">/15</div>
+              <p className="text-sm opacity-90 mt-1">Answer Analysis</p>
             </div>
           </div>
         </div>
@@ -188,7 +182,6 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
                   )} rounded-lg p-2 text-center border-2 transition-transform hover:scale-105`}
                 >
                   <div className="text-xl mb-1">{meta.icon}</div>
-                  <div className="text-lg font-bold">{score}</div>
                   <div className="text-xs font-medium">{meta.label}</div>
                 </div>
               );

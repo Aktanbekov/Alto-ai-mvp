@@ -1,30 +1,81 @@
 // Use environment variable, or empty string for same-origin (production), or localhost for dev
 const API = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? "" : "http://localhost:8080");
 
+import { getAccessToken, setAccessToken, clearAccessToken } from "./utils/tokenStorage";
+
+// Helper function to add Authorization header and handle 401 retries
+async function fetchWithAuth(url, options = {}) {
+  const token = getAccessToken();
+  
+  // Add Authorization header if token exists
+  const headers = {
+    ...options.headers,
+  };
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+  
+  // Handle 401 Unauthorized - try to refresh token and retry
+  if (response.status === 401 && token) {
+    try {
+      // Attempt to refresh the token
+      await refreshToken();
+      
+      // Retry the original request with new token
+      const newToken = getAccessToken();
+      if (newToken) {
+        headers["Authorization"] = `Bearer ${newToken}`;
+        return await fetch(url, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+      }
+    } catch (refreshError) {
+      // Refresh failed, clear token and let error propagate
+      clearAccessToken();
+      throw new Error("Session expired. Please log in again.");
+    }
+  }
+  
+  return response;
+}
+
 export async function getMe() {
-  const res = await fetch(`${API}/me`, { credentials: "include" });
+  const res = await fetchWithAuth(`${API}/me`);
   if (!res.ok) return null;
   return res.json();
 }
 
 export async function sendChatMessage(messages, sessionId = null) {
-  const res = await fetch(`${API}/api/v1/chat`, {
+  const res = await fetchWithAuth(`${API}/api/v1/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: "include",
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       messages,
-      session_id: sessionId 
+      session_id: sessionId
     }),
   });
-  
+
   if (!res.ok) {
+    // Handle authentication errors
+    if (res.status === 401 || res.status === 403) {
+      const error = await res.json().catch(() => ({ error: "Unauthorized" }));
+      throw new Error(`401 Unauthorized: ${error.error || "Please log in to continue"}`);
+    }
     const error = await res.json().catch(() => ({ error: "Failed to get response" }));
     throw new Error(error.error || "Failed to send message");
   }
-  
+
   const data = await res.json();
   return data.data; // Return full response object, not just content
 }
@@ -38,13 +89,18 @@ export async function login(email, password) {
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
-  
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: "Login failed" }));
     throw new Error(error.error || "Login failed");
   }
-  
-  return res.json();
+
+  const data = await res.json();
+  // Store access token from response
+  if (data.access_token) {
+    setAccessToken(data.access_token);
+  }
+  return data;
 }
 
 export async function logout() {
@@ -52,7 +108,10 @@ export async function logout() {
     method: "POST",
     credentials: "include",
   });
-  
+
+  // Clear access token from memory regardless of response
+  clearAccessToken();
+
   if (!res.ok) {
     throw new Error("Logout failed");
   }
@@ -63,12 +122,18 @@ export async function refreshToken() {
     method: "POST",
     credentials: "include",
   });
-  
+
   if (!res.ok) {
+    clearAccessToken();
     throw new Error("Token refresh failed");
   }
-  
-  return res.json();
+
+  const data = await res.json();
+  // Store new access token from response
+  if (data.access_token) {
+    setAccessToken(data.access_token);
+  }
+  return data;
 }
 
 export async function register(email, name, password) {
@@ -81,13 +146,13 @@ export async function register(email, name, password) {
       credentials: "include",
       body: JSON.stringify({ email, name, password }),
     });
-    
+
     // Check if response is HTML (wrong route)
     const contentType = res.headers.get("content-type");
     if (contentType && contentType.includes("text/html")) {
       throw new Error("Server returned HTML instead of JSON. The API endpoint may not be registered. Please restart the server.");
     }
-    
+
     if (!res.ok) {
       let error;
       try {
@@ -95,22 +160,22 @@ export async function register(email, name, password) {
       } catch (e) {
         throw new Error(`Registration failed: ${res.status} ${res.statusText}`);
       }
-      
+
       // Handle validation errors
       if (error.error === "validation_error" && error.details) {
         const details = error.details;
         const messages = [];
-        
+
         if (details.email) messages.push(`Email: ${getValidationMessage(details.email)}`);
         if (details.name) messages.push(`Name: ${getValidationMessage(details.name)}`);
         if (details.password) messages.push(`Password: ${getValidationMessage(details.password)}`);
-        
+
         throw new Error(messages.length > 0 ? messages.join(". ") : "Validation failed");
       }
-      
+
       throw new Error(error.error || "Registration failed");
     }
-    
+
     return res.json();
   } catch (err) {
     // Handle network errors
@@ -141,13 +206,18 @@ export async function verifyEmail(email, code) {
     credentials: "include",
     body: JSON.stringify({ email, code }),
   });
-  
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: "Verification failed" }));
     throw new Error(error.error || "Verification failed");
   }
-  
-  return res.json();
+
+  const data = await res.json();
+  // Store access token from response
+  if (data.access_token) {
+    setAccessToken(data.access_token);
+  }
+  return data;
 }
 
 export async function resendVerificationCode(email) {
@@ -159,12 +229,12 @@ export async function resendVerificationCode(email) {
     credentials: "include",
     body: JSON.stringify({ email }),
   });
-  
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: "Request failed" }));
     throw new Error(error.error || "Request failed");
   }
-  
+
   return res.json();
 }
 
@@ -177,12 +247,12 @@ export async function forgotPassword(email) {
     credentials: "include",
     body: JSON.stringify({ email }),
   });
-  
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: "Request failed" }));
     throw new Error(error.error || "Request failed");
   }
-  
+
   return res.json();
 }
 
@@ -195,11 +265,11 @@ export async function resetPassword(email, code, password) {
     credentials: "include",
     body: JSON.stringify({ email, code, password }),
   });
-  
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: "Password reset failed" }));
     throw new Error(error.error || "Password reset failed");
   }
-  
+
   return res.json();
 }

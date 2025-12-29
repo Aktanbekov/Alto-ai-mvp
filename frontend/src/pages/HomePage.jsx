@@ -1,13 +1,33 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { getMe, logout } from "../api";
+import { getMe } from "../api";
+import ProfileDropdown from "../components/ProfileDropdown";
+import { setAccessToken } from "../utils/tokenStorage";
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const observerRef = useRef(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Handle Google OAuth callback - extract access_token from query parameter
+  useEffect(() => {
+    const accessToken = searchParams.get("access_token");
+    if (accessToken) {
+      setAccessToken(accessToken);
+      // Remove access_token from URL
+      searchParams.delete("access_token");
+      setSearchParams(searchParams, { replace: true });
+      // Refresh user data
+      getMe().then((userData) => {
+        setUser(userData);
+      }).catch(() => {
+        setUser(null);
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   const startInterview = () => {
     if (user) {
@@ -17,14 +37,8 @@ export default function HomePage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setUser(null);
-      navigate("/");
-    } catch (err) {
-      console.error("Logout failed:", err);
-    }
+  const handleLogout = () => {
+    setUser(null);
   };
 
   useEffect(() => {
@@ -83,13 +97,16 @@ export default function HomePage() {
       {/* Navigation */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer bg-transparent border-none outline-none p-0"
+          >
             <span className="text-3xl sm:text-4xl">🤖</span>
             <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
               AI Interviewer
             </span>
-          </div>
-          
+          </button>
+
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
             <a href="#features" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors py-2 min-h-[44px] flex items-center">Features</a>
@@ -97,15 +114,7 @@ export default function HomePage() {
             <a href="#pricing" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors py-2 min-h-[44px] flex items-center">Pricing</a>
             {!loading && (
               user ? (
-                <div className="flex items-center gap-4">
-                  <span className="text-gray-700 font-medium text-sm lg:text-base">{user.name || user.email}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 lg:px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-all text-sm lg:text-base min-h-[44px]"
-                  >
-                    Logout
-                  </button>
-                </div>
+                <ProfileDropdown user={user} onLogout={handleLogout} />
               ) : (
                 <button
                   onClick={() => navigate("/login")}
@@ -162,17 +171,10 @@ export default function HomePage() {
               </a>
               {!loading && (
                 user ? (
-                  <div className="pt-2 border-t border-gray-200 space-y-3">
-                    <div className="py-2 text-gray-700 font-medium text-sm">{user.name || user.email}</div>
-                    <button
-                      onClick={() => {
-                        handleLogout();
-                        setMobileMenuOpen(false);
-                      }}
-                      className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-all text-sm font-medium min-h-[44px]"
-                    >
-                      Logout
-                    </button>
+                  <div className="pt-2 border-t border-gray-200">
+                    <div className="flex justify-end">
+                      <ProfileDropdown user={user} onLogout={handleLogout} />
+                    </div>
                   </div>
                 ) : (
                   <button
@@ -238,13 +240,13 @@ export default function HomePage() {
               <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Meet Your AI Interviewer</h3>
               <p className="text-sm sm:text-base text-gray-500">Ready to help you succeed!</p>
               <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-                <div className="bg-indigo-50 rounded-xl p-3 sm:p-4">
-                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">10k+</div>
-                  <div className="text-gray-600">Interviews Conducted</div>
+                <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl p-3 sm:p-4">
+                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2 text-white font-bold">10k+</div>
+                  <div className="text-indigo-100">Interviews Conducted</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl p-3 sm:p-4">
-                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">95%</div>
-                  <div className="text-gray-600">Success Rate</div>
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-3 sm:p-4">
+                  <div className="text-2xl sm:text-3xl mb-1 sm:mb-2 text-white font-bold">95%</div>
+                  <div className="text-purple-100">Success Rate</div>
                 </div>
               </div>
             </div>

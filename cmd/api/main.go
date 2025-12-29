@@ -10,6 +10,7 @@ import (
 	"time"
 	"altoai_mvp/internal/middleware"
 	"altoai_mvp/internal/router"
+	"altoai_mvp/interview"
 
 	"github.com/joho/godotenv"
 )
@@ -17,6 +18,14 @@ import (
 func init() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️ No .env file found")
+	}
+	
+	// Initialize interview questions
+	if err := interview.InitQuestions(); err != nil {
+		log.Printf("⚠️ Warning: Failed to load interview questions: %v", err)
+		log.Println("⚠️ Interview functionality may not work correctly")
+	} else {
+		log.Println("✅ Interview questions loaded successfully")
 	}
 }
 

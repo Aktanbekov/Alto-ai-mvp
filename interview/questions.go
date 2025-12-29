@@ -5,11 +5,56 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 )
 
 // QuestionsByCategory stores questions organized by category
 var QuestionsByCategory map[string][]string
+
+// InitQuestions tries to load questions from the questions.json file
+// It tries multiple possible paths to find the file
+func InitQuestions() error {
+	var possiblePaths []string
+	
+	// Try relative to working directory first
+	if wd, err := os.Getwd(); err == nil {
+		possiblePaths = append(possiblePaths,
+			filepath.Join(wd, "interview/questions.json"),
+			filepath.Join(wd, "questions.json"),
+		)
+	}
+	
+	// Try relative paths (for development)
+	possiblePaths = append(possiblePaths,
+		"interview/questions.json",
+		"./interview/questions.json",
+		"questions.json",
+		"./questions.json",
+	)
+	
+	// Try relative to executable (for production/Docker)
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		possiblePaths = append(possiblePaths,
+			filepath.Join(execDir, "interview/questions.json"),
+			filepath.Join(execDir, "questions.json"),
+		)
+	}
+	
+	// Try each path until one works
+	var lastErr error
+	for _, path := range possiblePaths {
+		if err := LoadQuestions(path); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	
+	// Return the last error if all paths failed
+	return fmt.Errorf("could not load questions.json from any of the tried paths: %w", lastErr)
+}
 
 // QuestionSelectionRules defines how many questions to ask from each category
 var QuestionSelectionRules = map[string]int{

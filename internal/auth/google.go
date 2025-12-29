@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -156,23 +157,81 @@ func HandleGoogleCallback(c *gin.Context) {
 		}
 	}
 
-	// JWT CREATE
-	secret := os.Getenv("JWT_SECRET")
-	claims := MyClaims{
-		Email:   gu.Email,
-		Name:    gu.Name,
-		Picture: gu.Picture,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "altoai_mvp",
-		},
+	// Get the user (either existing or newly created)
+	finalUser, err := sharedUserRepo.GetByEmail(gu.Email)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+		return
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte(secret))
+	// Generate access and refresh tokens
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "JWT_SECRET not set"})
+		return
+	}
+
+	// Generate access token (30 minutes)
+	accessExpiryStr := os.Getenv("ACCESS_TOKEN_EXPIRY")
+	if accessExpiryStr == "" {
+		accessExpiryStr = "30m"
+	}
+	var accessExpiry time.Duration
+	if len(accessExpiryStr) > 0 && accessExpiryStr[len(accessExpiryStr)-1] == 'm' {
+		minutes := 30
+		if len(accessExpiryStr) > 1 {
+			_, _ = fmt.Sscanf(accessExpiryStr[:len(accessExpiryStr)-1], "%d", &minutes)
+		}
+		accessExpiry = time.Duration(minutes) * time.Minute
+	} else {
+		accessExpiry = 30 * time.Minute
+	}
+
+	accessClaims := jwt.MapClaims{
+		"email":   finalUser.Email,
+		"name":    finalUser.Name,
+		"picture": gu.Picture,
+		"exp":     time.Now().Add(accessExpiry).Unix(),
+		"iat":     time.Now().Unix(),
+		"iss":     "altoai_mvp",
+		"type":    "access",
+	}
+	accessTokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessToken, err := accessTokenObj.SignedString([]byte(secret))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not sign jwt"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not sign access token"})
+		return
+	}
+
+	// Generate refresh token (30 days)
+	refreshExpiryStr := os.Getenv("REFRESH_TOKEN_EXPIRY")
+	if refreshExpiryStr == "" {
+		refreshExpiryStr = "720h"
+	}
+	var refreshExpiry time.Duration
+	if len(refreshExpiryStr) > 0 && refreshExpiryStr[len(refreshExpiryStr)-1] == 'h' {
+		hours := 720
+		if len(refreshExpiryStr) > 1 {
+			_, _ = fmt.Sscanf(refreshExpiryStr[:len(refreshExpiryStr)-1], "%d", &hours)
+		}
+		refreshExpiry = time.Duration(hours) * time.Hour
+	} else {
+		refreshExpiry = 30 * 24 * time.Hour
+	}
+
+	refreshClaims := jwt.MapClaims{
+		"email":   finalUser.Email,
+		"name":    finalUser.Name,
+		"picture": gu.Picture,
+		"exp":     time.Now().Add(refreshExpiry).Unix(),
+		"iat":     time.Now().Unix(),
+		"iss":     "altoai_mvp",
+		"type":    "refresh",
+	}
+	refreshTokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshToken, err := refreshTokenObj.SignedString([]byte(secret))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not sign refresh token"})
 		return
 	}
 
@@ -188,14 +247,15 @@ func HandleGoogleCallback(c *gin.Context) {
 		}
 	}
 
-	// Issue HttpOnly session cookie
-	// Use empty domain for same-origin, or specific domain if needed
+	// Set refresh token cookie (HttpOnly, Secure)
 	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		cookieDomain = "" // Empty means same origin
 	}
-	c.SetCookie("session", signed, 7*24*60*60, "/", cookieDomain, false, true)
+	isSecure := os.Getenv("GIN_MODE") == "release"
+	c.SetCookie("refresh_token", refreshToken, 30*24*60*60, "/", cookieDomain, isSecure, true)
 
-	// Back to frontend
-	c.Redirect(http.StatusFound, frontendURL+"/")
+	// Redirect to frontend with access token in query parameter
+	// Frontend will extract it and store in memory
+	c.Redirect(http.StatusFound, frontendURL+"/?access_token="+accessToken)
 }

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { sendChatMessage, logout } from "../api";
+import { sendChatMessage, getMe } from "../api";
 import AnswerFeedbackCard from "../components/AnswerFeedbackCard";
+import ProfileDropdown from "../components/ProfileDropdown";
 
 interface Message {
   id: number;
@@ -79,6 +80,36 @@ interface ChatResponse {
   improved_version?: string;
 }
 
+// Typewriter component for AI messages
+const TypewriterText: React.FC<{ text: string; messageId: number }> = ({ text, messageId }) => {
+  const [displayedText, setDisplayedText] = useState("");
+
+  useEffect(() => {
+    setDisplayedText("");
+    let currentIndex = 0;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const typeChar = () => {
+      if (currentIndex < text.length) {
+        setDisplayedText(text.slice(0, currentIndex + 1));
+        currentIndex++;
+        // Variable speed: faster for spaces, normal for characters
+        const char = text[currentIndex - 1];
+        const speed = char === ' ' ? 10 : char === '.' || char === '!' || char === '?' ? 50 : 15;
+        timeoutId = setTimeout(typeChar, speed);
+      }
+    };
+
+    // Start typing after a short delay
+    timeoutId = setTimeout(typeChar, 100);
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [text, messageId]);
+
+  return <span>{displayedText}</span>;
+};
+
 export default function Chat() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -110,10 +141,34 @@ export default function Chat() {
     };
   }, []);
 
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await getMe();
+        if (!user) {
+          navigate("/login");
+          return;
+        }
+      } catch (err) {
+        navigate("/login");
+        return;
+      }
+    };
+    checkAuth();
+  }, [navigate]);
+
   // Initialize interview on mount
   useEffect(() => {
     const initializeInterview = async () => {
       try {
+        // Check auth before initializing
+        const user = await getMe();
+        if (!user) {
+          navigate("/login");
+          return;
+        }
+
         setIsTyping(true);
         changeEmoji("thinking");
         const response: ChatResponse = await sendChatMessage([], null);
@@ -145,6 +200,13 @@ export default function Chat() {
       } catch (error) {
         setIsTyping(false);
         changeEmoji("default");
+        
+        // Check if it's an authentication error
+        if (error instanceof Error && (error.message.includes("401") || error.message.includes("Unauthorized") || error.message.includes("authentication"))) {
+          navigate("/login");
+          return;
+        }
+        
         const errorMessage: Message = {
           id: 1,
           text: `Failed to start interview: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -156,11 +218,16 @@ export default function Chat() {
     };
 
     initializeInterview();
-  }, []);
+  }, [navigate]);
 
-  // Calculate progress based on messages (each Q&A = 2 messages)
-  const qaPairs = Math.floor(messages.filter(m => m.sender === "user").length);
-  const progress = finished ? 100 : Math.min((qaPairs / 8) * 100, 100); // Assuming ~8 questions
+  // Calculate progress based on messages
+  const qaPairs = messages.filter(m => m.sender === "user").length;
+  const aiQuestions = messages.filter(m => m.sender === "ai" && !m.text.includes("Failed to") && !m.text.includes("Your answer is too short")).length;
+  // Calculate progress: show progress based on questions answered
+  // Use a reasonable estimate (8-10 questions typical), but cap at 95% until finished
+  // Only show 100% when interview is actually finished
+  const estimatedTotalQuestions = 10; // Reasonable estimate for interview length
+  const progress = finished ? 100 : Math.min((qaPairs / estimatedTotalQuestions) * 100, 95);
   const messageCount = messages.length;
   const timeElapsed = "12m"; // You can calculate this based on start time
 
@@ -190,6 +257,18 @@ export default function Chat() {
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputValue.trim() || finished) return;
+
+    // Check authentication before sending
+    try {
+      const user = await getMe();
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+    } catch (err) {
+      navigate("/login");
+      return;
+    }
 
     const messageText = inputValue.trim();
 
@@ -345,6 +424,12 @@ export default function Chat() {
       setIsTyping(false);
       changeEmoji("default");
 
+      // Check if it's an authentication error
+      if (error instanceof Error && (error.message.includes("401") || error.message.includes("Unauthorized") || error.message.includes("authentication") || error.message.includes("Session expired"))) {
+        navigate("/login");
+        return;
+      }
+
       const errorMessage: Message = {
         id: messages.length + 2,
         text: `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -372,31 +457,20 @@ export default function Chat() {
     }
   };
 
-  const handleEndSession = async () => {
-    if (window.confirm("Are you sure you want to end this interview session?")) {
-      try {
-        await logout();
-      } catch (err) {
-        console.error("Logout error:", err);
-      }
-      navigate("/");
-    }
-  };
-
-  const handleLogout = async () => {
-    if (window.confirm("Are you sure you want to logout?")) {
-      try {
-        await logout();
-        navigate("/");
-      } catch (err) {
-        console.error("Logout error:", err);
-        navigate("/");
-      }
-    }
-  };
-
   const handleRestartInterview = async () => {
     if (window.confirm("Are you sure you want to restart the interview? This will start a new session.")) {
+      // Check authentication before restarting
+      try {
+        const user = await getMe();
+        if (!user) {
+          navigate("/login");
+          return;
+        }
+      } catch (err) {
+        navigate("/login");
+        return;
+      }
+
       // Reset all state
       setMessages([]);
       setInputValue("");
@@ -444,6 +518,13 @@ export default function Chat() {
       } catch (error) {
         setIsTyping(false);
         changeEmoji("default");
+        
+        // Check if it's an authentication error
+        if (error instanceof Error && (error.message.includes("401") || error.message.includes("Unauthorized") || error.message.includes("authentication"))) {
+          navigate("/login");
+          return;
+        }
+        
         const errorMessage: Message = {
           id: 1,
           text: `Failed to start interview: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -456,9 +537,9 @@ export default function Chat() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex flex-col overflow-hidden">
       {/* Top Navigation Bar */}
-      <nav className="bg-white shadow-md sticky top-0 z-50">
+      <nav className="bg-white shadow-md flex-shrink-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <button
@@ -470,37 +551,27 @@ export default function Chat() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <span className="text-2xl sm:text-3xl">🤖</span>
-            <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              AI Interviewer
-            </span>
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-2 sm:gap-3 cursor-pointer bg-transparent border-none outline-none p-0"
+            >
+              <span className="text-2xl sm:text-3xl">🤖</span>
+              <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                AI Interviewer
+              </span>
+            </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            <button className="hidden sm:block px-3 sm:px-4 py-2 text-gray-600 hover:text-indigo-600 font-medium transition-colors text-sm sm:text-base min-h-[44px]">
-              Save Interview
-            </button>
-            <button
-              onClick={handleEndSession}
-              className="hidden sm:block px-3 sm:px-4 py-2 text-gray-600 hover:text-indigo-600 font-medium transition-colors text-sm sm:text-base min-h-[44px]"
-            >
-              End Session
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-all text-sm sm:text-base min-h-[44px]"
-            >
-              <span className="hidden sm:inline">Logout</span>
-              <span className="sm:hidden">Out</span>
-            </button>
+            <ProfileDropdown />
           </div>
         </div>
       </nav>
 
       {/* Main Chat Container */}
-      <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
-        <div className="flex gap-4 sm:gap-6 items-start relative">
+      <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 flex-1 flex overflow-hidden w-full">
+        <div className="flex gap-4 sm:gap-6 items-start relative w-full h-full">
           {/* Large AI Character Sidebar */}
-          <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:sticky top-16 lg:top-24 left-0 z-40 lg:z-auto h-[calc(100vh-4rem)] lg:h-auto overflow-y-auto flex-shrink-0 w-80 sm:w-96 bg-white rounded-r-3xl lg:rounded-3xl shadow-2xl p-6 sm:p-8 flex flex-col items-center transition-transform duration-300 ease-in-out`}>
+          <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:relative top-16 lg:top-0 left-0 z-40 lg:z-auto h-[calc(100vh-4rem)] lg:h-full overflow-y-auto flex-shrink-0 w-80 sm:w-96 bg-white rounded-r-3xl lg:rounded-3xl shadow-2xl p-6 sm:p-8 flex flex-col items-center transition-transform duration-300 ease-in-out`}>
             {/* Close button for mobile */}
             <button
               onClick={() => setSidebarOpen(false)}
@@ -538,7 +609,6 @@ export default function Chat() {
             <div className="w-full mb-4 sm:mb-6">
               <div className="flex justify-between text-xs text-gray-500 mb-2">
                 <span>Interview Progress</span>
-                <span>{Math.round(progress)}%</span>
               </div>
               <div className="bg-gray-200 rounded-full h-2 sm:h-3 w-full overflow-hidden">
                 <div
@@ -547,19 +617,6 @@ export default function Chat() {
                 ></div>
               </div>
             </div>
-
-            {/* Stats */}
-            <div className="w-full grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6">
-              <div className="bg-indigo-50 rounded-xl p-3 sm:p-4 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-indigo-600">{messageCount}</div>
-                <div className="text-xs text-gray-600">Messages</div>
-              </div>
-              <div className="bg-purple-50 rounded-xl p-3 sm:p-4 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-purple-600">{timeElapsed}</div>
-                <div className="text-xs text-gray-600">Time</div>
-              </div>
-            </div>
-
 
             {/* Restart Interview Button - Show when finished */}
             {finished && (
@@ -570,17 +627,6 @@ export default function Chat() {
                 🔄 Restart Interview
               </button>
             )}
-
-            {/* Tips Section */}
-            <div className="w-full bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-3 sm:p-4 border-2 border-yellow-200">
-              <div className="flex items-start gap-2">
-                <span className="text-lg sm:text-xl">💡</span>
-                <div>
-                  <h4 className="font-semibold text-gray-800 text-xs sm:text-sm mb-1">Pro Tip</h4>
-                  <p className="text-xs text-gray-600">Take your time to think before answering. Quality over speed!</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Overlay for mobile sidebar */}
@@ -592,27 +638,13 @@ export default function Chat() {
           )}
 
           {/* Chat Area */}
-          <div className="flex-1 w-full bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col" style={{ height: "calc(100vh - 80px)", minHeight: "500px" }}>
+          <div className="flex-1 w-full bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-full max-h-full">
             {/* Chat Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 sm:p-6 text-white">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <h1 className="text-lg sm:text-xl md:text-2xl font-bold truncate">Interview Session</h1>
                   <p className="text-indigo-100 text-xs sm:text-sm truncate">Software Engineer Position • Technical Round</p>
-                </div>
-                <div className="flex gap-1 sm:gap-2 ml-2">
-                  <button
-                    className="p-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    title="Hints"
-                  >
-                    💡
-                  </button>
-                  <button
-                    className="p-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    title="Settings"
-                  >
-                    ⚙️
-                  </button>
                 </div>
               </div>
             </div>
@@ -637,7 +669,13 @@ export default function Chat() {
                         <span className="text-xs font-semibold text-indigo-600">AI Interviewer</span>
                       </div>
                     )}
-                    <p className="text-xs sm:text-sm leading-relaxed break-words">{message.text}</p>
+                    <p className="text-xs sm:text-sm leading-relaxed break-words">
+                      {message.sender === "ai" ? (
+                        <TypewriterText text={message.text} messageId={message.id} />
+                      ) : (
+                        message.text
+                      )}
+                    </p>
                   </div>
                 </div>
               ))}

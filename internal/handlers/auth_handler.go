@@ -26,20 +26,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.authSvc.Login(c.Request.Context(), dto)
+	accessToken, refreshToken, user, err := h.authSvc.Login(c.Request.Context(), dto)
 	if err != nil {
 		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	// Set cookie
+	// Set refresh token cookie (HttpOnly, Secure)
 	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		cookieDomain = ""
 	}
-	c.SetCookie("session", token, 7*24*60*60, "/", cookieDomain, false, true)
+	// Refresh token expires in 30 days (720 hours)
+	c.SetCookie("refresh_token", refreshToken, 30*24*60*60, "/", cookieDomain, os.Getenv("GIN_MODE") == "release", true)
 
+	// Return access token in JSON response
 	response.OK(c, gin.H{
+		"access_token": accessToken,
 		"user": gin.H{
 			"email": user.Email,
 			"name":  user.Name,
@@ -72,20 +75,23 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.authSvc.VerifyEmail(c.Request.Context(), dto)
+	accessToken, refreshToken, user, err := h.authSvc.VerifyEmail(c.Request.Context(), dto)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Set cookie
+	// Set refresh token cookie (HttpOnly, Secure)
 	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		cookieDomain = ""
 	}
-	c.SetCookie("session", token, 7*24*60*60, "/", cookieDomain, false, true)
+	// Refresh token expires in 30 days (720 hours)
+	c.SetCookie("refresh_token", refreshToken, 30*24*60*60, "/", cookieDomain, os.Getenv("GIN_MODE") == "release", true)
 
+	// Return access token in JSON response
 	response.OK(c, gin.H{
+		"access_token": accessToken,
 		"user": gin.H{
 			"email": user.Email,
 			"name":  user.Name,
@@ -150,35 +156,39 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Clear the session cookie
+	// Clear the refresh token cookie
 	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		cookieDomain = ""
 	}
-	c.SetCookie("session", "", -1, "/", cookieDomain, false, true)
+	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, os.Getenv("GIN_MODE") == "release", true)
 	c.Status(http.StatusNoContent)
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	// Get token from cookie
-	token, err := c.Cookie("session")
+	// Get refresh token from cookie (ignore any access token)
+	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
-		response.Error(c, http.StatusUnauthorized, "no session found")
+		response.Error(c, http.StatusUnauthorized, "no refresh token found")
 		return
 	}
 
-	newToken, err := h.authSvc.RefreshToken(c.Request.Context(), token)
+	newAccessToken, newRefreshToken, err := h.authSvc.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	// Set new cookie
+	// Set new refresh token cookie
 	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		cookieDomain = ""
 	}
-	c.SetCookie("session", newToken, 7*24*60*60, "/", cookieDomain, false, true)
+	// Refresh token expires in 30 days (720 hours)
+	c.SetCookie("refresh_token", newRefreshToken, 30*24*60*60, "/", cookieDomain, os.Getenv("GIN_MODE") == "release", true)
 
-	response.OK(c, gin.H{"message": "token refreshed"})
+	// Return new access token in JSON response
+	response.OK(c, gin.H{
+		"access_token": newAccessToken,
+	})
 }
