@@ -105,10 +105,98 @@ func LoadQuestions(path string) error {
 }
 
 // SelectQuestionsForSession selects questions according to the rules
-func SelectQuestionsForSession() []Question {
+// level can be "easy", "medium", "hard", or "" for default
+// Always includes college and major questions at the start
+func SelectQuestionsForSession(level string) []Question {
 	var selectedQuestions []Question
 	rand.Seed(time.Now().UnixNano())
 
+	// Always add college and major questions first
+	selectedQuestions = append(selectedQuestions, Question{
+		ID:       "q0_college",
+		Category: "University Choice",
+		Text:     "Which college or university will you attend?",
+	})
+	selectedQuestions = append(selectedQuestions, Question{
+		ID:       "q0_major",
+		Category: "Academic Background",
+		Text:     "What is your major?",
+	})
+
+	// For easy level, select exactly 1 question from each of 4 specific categories
+	if level == "easy" {
+		easyCategories := []string{
+			"Purpose of Study",
+			"University Choice",
+			"Financial Capability",
+			"Post-Graduation Plans",
+		}
+
+		for _, category := range easyCategories {
+			questions, ok := QuestionsByCategory[category]
+			if !ok || len(questions) == 0 {
+				continue
+			}
+
+			// Select one random question from this category
+			available := make([]string, len(questions))
+			copy(available, questions)
+			
+			// Shuffle and take 1 question
+			rand.Shuffle(len(available), func(i, j int) {
+				available[i], available[j] = available[j], available[i]
+			})
+
+			questionID := fmt.Sprintf("q%d_%s", len(selectedQuestions)+1, sanitizeCategory(category))
+			selectedQuestions = append(selectedQuestions, Question{
+				ID:       questionID,
+				Category: category,
+				Text:     available[0],
+			})
+		}
+
+		return selectedQuestions
+	}
+
+	// For medium level, select exactly 1 question from each of all 7 categories
+	if level == "medium" {
+		mediumCategories := []string{
+			"Purpose of Study",
+			"Academic Background",
+			"University Choice",
+			"Financial Capability",
+			"Family/Sponsor Info",
+			"Post-Graduation Plans",
+			"Immigration Intent",
+		}
+
+		for _, category := range mediumCategories {
+			questions, ok := QuestionsByCategory[category]
+			if !ok || len(questions) == 0 {
+				continue
+			}
+
+			// Select one random question from this category
+			available := make([]string, len(questions))
+			copy(available, questions)
+			
+			// Shuffle and take 1 question
+			rand.Shuffle(len(available), func(i, j int) {
+				available[i], available[j] = available[j], available[i]
+			})
+
+			questionID := fmt.Sprintf("q%d_%s", len(selectedQuestions)+1, sanitizeCategory(category))
+			selectedQuestions = append(selectedQuestions, Question{
+				ID:       questionID,
+				Category: category,
+				Text:     available[0],
+			})
+		}
+
+		return selectedQuestions
+	}
+
+	// Default behavior for hard level or empty level (12 questions total)
 	for _, category := range CategoryOrder {
 		count, ok := QuestionSelectionRules[category]
 		if !ok {

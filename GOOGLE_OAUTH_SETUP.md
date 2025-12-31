@@ -156,3 +156,4 @@ If you're still having issues:
 3. Test the redirect URL manually: Visit `http://localhost:3000/auth/google` in browser
 4. Check Google Cloud Console for any error messages
 
+

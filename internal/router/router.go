@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"altoai_mvp/internal/auth"
 	"altoai_mvp/internal/handlers"
 	"altoai_mvp/internal/middleware"
@@ -11,18 +12,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New() *gin.Engine {
+func New() (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestLogger())
 
-	// wiring (DI)
-	userRepo := repository.NewUserMemoryRepo()
+	// wiring (DI) - Use PostgreSQL repository
+	userRepo, err := repository.NewPostgresRepo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize PostgreSQL: %v", err)
+	}
+
 	userSvc := services.NewUserService(userRepo)
 	authSvc := services.NewAuthService(userRepo)
 	userH := handlers.NewUserHandler(userSvc)
 	authH := handlers.NewAuthHandler(authSvc)
-	chatH := handlers.NewChatHandler()
+	chatH := handlers.NewChatHandler(userSvc)
 
 	// Initialize Google auth with the user repository
 	auth.SetUserRepo(userRepo)
@@ -36,11 +41,26 @@ func New() *gin.Engine {
 	
 	// User info endpoint (requires auth)
 	r.GET("/me", middleware.JWTAuth(), func(c *gin.Context) {
-		user := c.MustGet("user").(*middleware.MyClaims)
+		claims := c.MustGet("user").(*middleware.MyClaims)
+		// Get full user data from database
+		dbUser, err := userSvc.GetByEmail(c.Request.Context(), claims.Email)
+		if err != nil {
+			// Fallback to claims if user not found in DB
+			c.JSON(http.StatusOK, gin.H{
+				"email": claims.Email,
+				"name": claims.Name,
+				"picture": claims.Picture,
+				"college": "",
+				"major": "",
+			})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
-			"email": user.Email,
-			"name": user.Name,
-			"picture": user.Picture,
+			"email": dbUser.Email,
+			"name": dbUser.Name,
+			"picture": claims.Picture,
+			"college": dbUser.College,
+			"major": dbUser.Major,
 		})
 	})
 
@@ -61,12 +81,13 @@ func New() *gin.Engine {
 		v1.GET("/users", userH.List)
 		v1.POST("/users", userH.Create)
 		v1.GET("/users/:id", userH.Get)
-		v1.PUT("/users/:id", userH.Update)
+		v1.PUT("/users/:id", middleware.JWTAuth(), userH.Update)
 		v1.DELETE("/users/:id", userH.Delete)
+		v1.PUT("/users/me/profile", middleware.JWTAuth(), userH.UpdateProfile)
 		
 		// Chat route (requires auth)
 		v1.POST("/chat", middleware.JWTAuth(), chatH.Chat)
 	}
 
-	return r
+	return r, nil
 }

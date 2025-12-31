@@ -65,7 +65,16 @@ func (s *userService) GetByEmail(ctx context.Context, email string) (models.User
 func (s *userService) Update(ctx context.Context, id string, dto models.UpdateUserDTO) (models.User, error) {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
-	return s.repo.Update(id, dto.Email, dto.Name)
+	// Update basic fields
+	user, err := s.repo.Update(id, dto.Email, dto.Name)
+	if err != nil {
+		return user, err
+	}
+	// Update college and major if provided
+	if dto.College != nil || dto.Major != nil {
+		return s.repo.UpdateCollegeMajor(id, dto.College, dto.Major)
+	}
+	return user, nil
 }
 
 func (s *userService) Delete(ctx context.Context, id string) error {

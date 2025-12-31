@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"altoai_mvp/interview"
+	"altoai_mvp/internal/middleware"
+	"altoai_mvp/internal/models"
+	"altoai_mvp/internal/services"
 	"altoai_mvp/pkg/response"
 	"fmt"
 	"log"
@@ -12,10 +15,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ChatHandler struct{}
+type ChatHandler struct {
+	userSvc services.UserService
+}
 
-func NewChatHandler() *ChatHandler {
-	return &ChatHandler{}
+func NewChatHandler(userSvc services.UserService) *ChatHandler {
+	return &ChatHandler{userSvc: userSvc}
 }
 
 type ChatRequest struct {
@@ -24,6 +29,7 @@ type ChatRequest struct {
 		Content string `json:"content"`
 	} `json:"messages"`
 	SessionID string `json:"session_id,omitempty"` // Optional: for continuing existing interview
+	Level     string `json:"level,omitempty"`      // Optional: difficulty level (easy, medium, hard)
 }
 
 type ChatResponse struct {
@@ -56,16 +62,21 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 			session = s
 			isNewSession = false
 		} else {
-			// Session not found, create new one
-			session = interview.NewSession("")
+			// Session not found, create new one with level
+			session = interview.NewSessionWithLevel("", req.Level)
 			interview.SaveSession(session)
 			isNewSession = true
 		}
 	} else {
-		// No session ID provided, create new session
-		session = interview.NewSession("")
+		// No session ID provided, create new session with level
+		session = interview.NewSessionWithLevel("", req.Level)
 		interview.SaveSession(session)
 		isNewSession = true
+	}
+
+	// Log for debugging
+	if req.Level != "" {
+		log.Printf("Creating session with level: %s, selected questions: %d", req.Level, len(session.SelectedQuestions))
 	}
 
 	// If session is finished, return completion message
@@ -199,6 +210,24 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 			Scores:     &session.Scores,
 		})
 		return
+	}
+
+	// Save college/major to database if these questions are answered
+	if currentQ.ID == "q0_college" || currentQ.ID == "q0_major" {
+		claims := c.MustGet("user").(*middleware.MyClaims)
+		user, err := h.userSvc.GetByEmail(c.Request.Context(), claims.Email)
+		if err == nil {
+			updateDTO := models.UpdateUserDTO{}
+			if currentQ.ID == "q0_college" {
+				updateDTO.College = &lastUserMessage
+			} else if currentQ.ID == "q0_major" {
+				updateDTO.Major = &lastUserMessage
+			}
+			_, err = h.userSvc.Update(c.Request.Context(), user.ID, updateDTO)
+			if err != nil {
+				log.Printf("Failed to save %s to database: %v", currentQ.ID, err)
+			}
+		}
 	}
 
 	// Record the answer

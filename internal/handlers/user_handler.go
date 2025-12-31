@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"altoai_mvp/internal/middleware"
 	"altoai_mvp/internal/models"
 	"altoai_mvp/internal/repository"
 	"altoai_mvp/internal/services"
@@ -86,4 +87,35 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *UserHandler) UpdateProfile(c *gin.Context) {
+	claims := c.MustGet("user").(*middleware.MyClaims)
+	// Get user by email
+	user, err := h.svc.GetByEmail(c.Request.Context(), claims.Email)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			response.Error(c, http.StatusNotFound, "user not found")
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, "failed to get user")
+		return
+	}
+	
+	var dto models.UpdateUserDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		response.ValidationError(c, errs.FromBinding(err))
+		return
+	}
+	
+	u, err := h.svc.Update(c.Request.Context(), user.ID, dto)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			response.Error(c, http.StatusNotFound, "user not found")
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+	response.OK(c, u)
 }

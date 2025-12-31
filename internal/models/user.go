@@ -8,6 +8,8 @@ type User struct {
 	Name                    string    `json:"name"`
 	Password                string    `json:"-"` // Don't serialize password
 	EmailVerified           bool      `json:"email_verified"`
+	College                 string    `json:"college,omitempty"`
+	Major                   string    `json:"major,omitempty"`
 	VerificationCode        string    `json:"-"`
 	VerificationCodeExpires time.Time `json:"-"`
 	ResetCode               string    `json:"-"`
@@ -28,8 +30,10 @@ type LoginDTO struct {
 }
 
 type UpdateUserDTO struct {
-	Email *string `json:"email" binding:"omitempty,email"`
-	Name  *string `json:"name"  binding:"omitempty,min=2,max=64"`
+	Email   *string `json:"email" binding:"omitempty,email"`
+	Name    *string `json:"name"  binding:"omitempty,min=2,max=64"`
+	College *string `json:"college" binding:"omitempty"`
+	Major   *string `json:"major" binding:"omitempty"`
 }
 
 type VerifyEmailDTO struct {

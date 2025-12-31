@@ -13,10 +13,14 @@ var (
 )
 
 func NewSession(userID string) *Session {
+	return NewSessionWithLevel(userID, "")
+}
+
+func NewSessionWithLevel(userID string, level string) *Session {
 	now := time.Now()
 	
-	// Select questions for this session
-	selectedQuestions := SelectQuestionsForSession()
+	// Select questions for this session based on level
+	selectedQuestions := SelectQuestionsForSession(level)
 	
 	session := &Session{
 		ID:               uuid.NewString(),

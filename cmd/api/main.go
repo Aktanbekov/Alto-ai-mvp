@@ -30,7 +30,10 @@ func init() {
 }
 
 func main() {
-	r := router.New()
+	r, err := router.New()
+	if err != nil {
+		log.Fatalf("Failed to initialize router: %v", err)
+	}
 
 	handler := middleware.CORSLegacy(r)
 	srv := &http.Server{

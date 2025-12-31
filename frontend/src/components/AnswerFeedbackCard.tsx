@@ -44,7 +44,6 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
   
   // Helper to check if feedback has content
   const hasFeedback = feedback && (
-    feedback.overall || 
     feedback.by_criterion?.migration_intent ||
     feedback.by_criterion?.goal_understanding ||
     feedback.by_criterion?.answer_length ||
@@ -191,23 +190,6 @@ const AnswerFeedbackCard: React.FC<AnswerFeedbackCardProps> = ({
           {/* Feedback */}
           {hasFeedback && (
             <div className="space-y-3">
-              {/* Overall Feedback */}
-              {feedback.overall && (
-                <div className="bg-white border-l-4 border-indigo-500 p-3 rounded-lg shadow-sm">
-                  <div className="flex items-start gap-2">
-                    <span className="text-lg mt-0.5">💡</span>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1">
-                        OVERALL FEEDBACK
-                      </p>
-                      <p className="text-sm text-gray-700 leading-relaxed">
-                        {feedback.overall}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Feedback by Criterion */}
               {(feedback.by_criterion?.migration_intent || 
                 feedback.by_criterion?.goal_understanding || 

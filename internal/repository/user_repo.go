@@ -18,6 +18,7 @@ type UserRepo interface {
 	GetByEmail(email string) (models.User, error)
 	Create(email, name, passwordHash string) (models.User, error)
 	Update(id string, email, name *string) (models.User, error)
+	UpdateCollegeMajor(id string, college, major *string) (models.User, error)
 	Delete(id string) error
 	SetVerificationCode(email, code string, expiresAt time.Time) error
 	VerifyEmail(email, code string) error
@@ -96,6 +97,24 @@ func (r *userMemoryRepo) Update(id string, email, name *string) (models.User, er
 	}
 	if name != nil {
 		u.Name = *name
+	}
+	u.UpdatedAt = time.Now().UTC()
+	r.store[id] = u
+	return u, nil
+}
+
+func (r *userMemoryRepo) UpdateCollegeMajor(id string, college, major *string) (models.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.store[id]
+	if !ok {
+		return models.User{}, ErrNotFound
+	}
+	if college != nil {
+		u.College = *college
+	}
+	if major != nil {
+		u.Major = *major
 	}
 	u.UpdatedAt = time.Now().UTC()
 	r.store[id] = u

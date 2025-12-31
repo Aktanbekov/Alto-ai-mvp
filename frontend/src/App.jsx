@@ -7,6 +7,7 @@ const HomePage = lazy(() => import("./pages/HomePage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const LevelSelection = lazy(() => import("./ChooseLevels"));
 const Chat = lazy(() => import("./pages/Chat"));
 
 // Loading fallback component
@@ -27,6 +28,14 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route
+          path="/choose-level"
+          element={
+            <ProtectedRoute>
+              <LevelSelection />
+            </ProtectedRoute>
+          }
+        />
       <Route
           path="/chat"
         element={

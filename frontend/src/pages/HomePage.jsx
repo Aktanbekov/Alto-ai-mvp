@@ -31,7 +31,7 @@ export default function HomePage() {
 
   const startInterview = () => {
     if (user) {
-      navigate("/chat");
+      navigate("/choose-level");
     } else {
       navigate("/login");
     }

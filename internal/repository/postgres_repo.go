@@ -44,6 +44,8 @@ func NewPostgresRepo() (UserRepo, error) {
 			name VARCHAR(255) NOT NULL,
 			password_hash VARCHAR(255),
 			email_verified BOOLEAN DEFAULT FALSE,
+			college VARCHAR(255),
+			major VARCHAR(255),
 			verification_code VARCHAR(6),
 			verification_code_expires TIMESTAMP,
 			reset_code VARCHAR(6),
@@ -60,6 +62,8 @@ func NewPostgresRepo() (UserRepo, error) {
 	migrations := []string{
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS college VARCHAR(255)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS major VARCHAR(255)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR(6)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires TIMESTAMP`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR(6)`,
@@ -106,7 +110,7 @@ func NewPostgresRepo() (UserRepo, error) {
 }
 
 func (r *postgresRepo) List() ([]models.User, error) {
-	rows, err := r.db.Query("SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users")
+	rows, err := r.db.Query("SELECT id, email, name, password_hash, email_verified, college, major, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -115,9 +119,9 @@ func (r *postgresRepo) List() ([]models.User, error) {
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		var passwordHash, verificationCode, resetCode sql.NullString
+		var passwordHash, verificationCode, resetCode, college, major sql.NullString
 		var verificationCodeExpires, resetCodeExpires sql.NullTime
-		err := rows.Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
+		err := rows.Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &college, &major, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -136,6 +140,12 @@ func (r *postgresRepo) List() ([]models.User, error) {
 		if resetCodeExpires.Valid {
 			u.ResetCodeExpires = resetCodeExpires.Time
 		}
+		if college.Valid {
+			u.College = college.String
+		}
+		if major.Valid {
+			u.Major = major.String
+		}
 		users = append(users, u)
 	}
 	return users, nil
@@ -143,12 +153,12 @@ func (r *postgresRepo) List() ([]models.User, error) {
 
 func (r *postgresRepo) Get(id string) (models.User, error) {
 	var u models.User
-	var passwordHash, verificationCode, resetCode sql.NullString
+	var passwordHash, verificationCode, resetCode, college, major sql.NullString
 	var verificationCodeExpires, resetCodeExpires sql.NullTime
 	err := r.db.QueryRow(
-		"SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE id = $1",
+		"SELECT id, email, name, password_hash, email_verified, college, major, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE id = $1",
 		id,
-	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &college, &major, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return models.User{}, ErrNotFound
@@ -176,12 +186,12 @@ func (r *postgresRepo) Get(id string) (models.User, error) {
 
 func (r *postgresRepo) GetByEmail(email string) (models.User, error) {
 	var u models.User
-	var passwordHash, verificationCode, resetCode sql.NullString
+	var passwordHash, verificationCode, resetCode, college, major sql.NullString
 	var verificationCodeExpires, resetCodeExpires sql.NullTime
 	err := r.db.QueryRow(
-		"SELECT id, email, name, password_hash, email_verified, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE email = $1",
+		"SELECT id, email, name, password_hash, email_verified, college, major, verification_code, verification_code_expires, reset_code, reset_code_expires, created_at, updated_at FROM users WHERE email = $1",
 		email,
-	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &passwordHash, &u.EmailVerified, &college, &major, &verificationCode, &verificationCodeExpires, &resetCode, &resetCodeExpires, &u.CreatedAt, &u.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return models.User{}, ErrNotFound
@@ -203,6 +213,12 @@ func (r *postgresRepo) GetByEmail(email string) (models.User, error) {
 	}
 	if resetCodeExpires.Valid {
 		u.ResetCodeExpires = resetCodeExpires.Time
+	}
+	if college.Valid {
+		u.College = college.String
+	}
+	if major.Valid {
+		u.Major = major.String
 	}
 	return u, nil
 }
@@ -251,16 +267,52 @@ func (r *postgresRepo) Update(id string, email, name *string) (models.User, erro
 
 	_, err = tx.Exec(
 		"UPDATE users SET email = $1, name = $2, updated_at = $3 WHERE id = $4",
-		u.Email, u.Name, u.UpdatedAt, u.ID,
+		u.Email, u.Name, u.UpdatedAt, id,
 	)
 	if err != nil {
 		return models.User{}, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return models.User{}, err
 	}
-	return u, nil
+
+	return r.Get(id)
+}
+
+func (r *postgresRepo) UpdateCollegeMajor(id string, college, major *string) (models.User, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return models.User{}, err
+	}
+	defer tx.Rollback()
+
+	u, err := r.Get(id)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	if college != nil {
+		u.College = *college
+	}
+	if major != nil {
+		u.Major = *major
+	}
+	u.UpdatedAt = time.Now().UTC()
+
+	_, err = tx.Exec(
+		"UPDATE users SET college = $1, major = $2, updated_at = $3 WHERE id = $4",
+		u.College, u.Major, u.UpdatedAt, id,
+	)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return models.User{}, err
+	}
+
+	return r.Get(id)
 }
 
 func (r *postgresRepo) Delete(id string) error {

@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { sendChatMessage, getMe } from "../api";
 import AnswerFeedbackCard from "../components/AnswerFeedbackCard";
 import ProfileDropdown from "../components/ProfileDropdown";
+import OverallGrade from "../OverallGrade";
+import CollegeMajorForm from "../components/CollegeMajorForm";
 
 interface Message {
   id: number;
@@ -112,6 +114,7 @@ const TypewriterText: React.FC<{ text: string; messageId: number }> = ({ text, m
 
 export default function Chat() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [emojiState, setEmojiState] = useState<EmojiState>("default");
@@ -121,6 +124,9 @@ export default function Chat() {
   const [scores, setScores] = useState<InterviewScores | null>(null);
   const [finished, setFinished] = useState(false);
   const [answerAnalyses, setAnswerAnalyses] = useState<Array<{ question: string, answer: string, analysis: ChatResponse['analysis'] }>>([]);
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [collegeMajorComplete, setCollegeMajorComplete] = useState(false);
+  const [checkingCollegeMajor, setCheckingCollegeMajor] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -130,8 +136,12 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
+    // Only scroll to bottom if interview is not finished
+    // When finished, keep the scroll position at the last answer
+    if (!finished) {
+      scrollToBottom();
+    }
+  }, [messages, isTyping, finished]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -141,25 +151,48 @@ export default function Chat() {
     };
   }, []);
 
-  // Check authentication on mount
+  // Get level from URL parameter
   useEffect(() => {
-    const checkAuth = async () => {
+    const level = searchParams.get("level");
+    if (level) {
+      setSelectedLevel(level);
+      // Remove level from URL after reading it
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete("level");
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Check authentication and college/major info on mount
+  useEffect(() => {
+    const checkAuthAndInfo = async () => {
       try {
         const user = await getMe();
         if (!user) {
           navigate("/login");
           return;
         }
+        // Check if college and major are filled
+        if (user.college && user.major) {
+          setCollegeMajorComplete(true);
+        }
       } catch (err) {
         navigate("/login");
         return;
+      } finally {
+        setCheckingCollegeMajor(false);
       }
     };
-    checkAuth();
+    checkAuthAndInfo();
   }, [navigate]);
 
-  // Initialize interview on mount
+  // Initialize interview on mount (wait for level to be set if present and college/major complete)
   useEffect(() => {
+    // Don't initialize if still checking or if college/major not complete
+    if (checkingCollegeMajor || !collegeMajorComplete) {
+      return;
+    }
+
     const initializeInterview = async () => {
       try {
         // Check auth before initializing
@@ -169,9 +202,18 @@ export default function Chat() {
           return;
         }
 
+        // Get level from URL if not already set (handle case where level is in URL but state not updated yet)
+        const levelFromUrl = searchParams.get("level");
+        const levelToUse = selectedLevel || levelFromUrl || undefined;
+
         setIsTyping(true);
         changeEmoji("thinking");
-        const response: ChatResponse = await sendChatMessage([], null);
+        const response: ChatResponse = await sendChatMessage([], null, levelToUse);
+        
+        // Store the level in state if we got it from URL
+        if (levelFromUrl && !selectedLevel) {
+          setSelectedLevel(levelFromUrl);
+        }
 
         if (response.session_id) {
           setSessionId(response.session_id);
@@ -218,18 +260,91 @@ export default function Chat() {
     };
 
     initializeInterview();
-  }, [navigate]);
+  }, [navigate, selectedLevel, searchParams, checkingCollegeMajor, collegeMajorComplete]);
 
   // Calculate progress based on messages
   const qaPairs = messages.filter(m => m.sender === "user").length;
   const aiQuestions = messages.filter(m => m.sender === "ai" && !m.text.includes("Failed to") && !m.text.includes("Your answer is too short")).length;
-  // Calculate progress: show progress based on questions answered
-  // Use a reasonable estimate (8-10 questions typical), but cap at 95% until finished
-  // Only show 100% when interview is actually finished
-  const estimatedTotalQuestions = 10; // Reasonable estimate for interview length
-  const progress = finished ? 100 : Math.min((qaPairs / estimatedTotalQuestions) * 100, 95);
+  
+  // Calculate progress based on selected level
+  // Easy: 4 questions, Medium: 7 questions, Hard: 12 questions, Default: 10 questions
+  const getTotalQuestions = () => {
+    if (selectedLevel === "easy") return 4;
+    if (selectedLevel === "medium") return 7;
+    if (selectedLevel === "hard") return 12;
+    return 10; // default
+  };
+
+  const totalQuestions = getTotalQuestions();
+  const progress = finished ? 100 : Math.min((qaPairs / totalQuestions) * 100, 95);
   const messageCount = messages.length;
   const timeElapsed = "12m"; // You can calculate this based on start time
+
+  // Calculate overall grade data from answer analyses
+  const overallGradeData = useMemo(() => {
+    if (!finished || answerAnalyses.length === 0) return null;
+
+    // Calculate average scores from all analyses
+    let totalScoreSum = 0;
+    let migrationIntentSum = 0;
+    let goalUnderstandingSum = 0;
+    let answerLengthSum = 0;
+    let count = 0;
+
+    answerAnalyses.forEach((item) => {
+      if (item.analysis?.scores) {
+        const scores = item.analysis.scores;
+        totalScoreSum += scores.total_score || 0;
+        migrationIntentSum += scores.migration_intent || 0;
+        goalUnderstandingSum += scores.goal_understanding || 0;
+        answerLengthSum += scores.answer_length || 0;
+        count++;
+      }
+    });
+
+    if (count === 0) return null;
+
+    // Convert scores to percentages (scores are 3-15, convert to 0-100 scale)
+    // Formula: ((score - 3) / 12) * 100
+    const avgTotal = ((totalScoreSum / count - 3) / 12) * 100;
+    const avgMigrationIntent = ((migrationIntentSum / count - 3) / 12) * 100;
+    const avgGoalUnderstanding = ((goalUnderstandingSum / count - 3) / 12) * 100;
+    const avgAnswerLength = ((answerLengthSum / count - 3) / 12) * 100;
+
+    // Get overall feedback from the last AI message if it contains overall feedback
+    const lastAiMessage = [...messages].reverse().find(m => m.sender === "ai");
+    const overallFeedback = lastAiMessage?.text?.includes("Thank you for completing") 
+      ? lastAiMessage.text 
+      : "Review your answers above to see detailed feedback for each question.";
+
+    return {
+      score: Math.round(avgTotal),
+      categoryScores: [
+        { name: 'Goals', score: Math.round(avgGoalUnderstanding), emoji: '🎯' },
+        { name: 'Home Intent', score: Math.round(avgMigrationIntent), emoji: '🏠' },
+        { name: 'Answer Length', score: Math.round(avgAnswerLength), emoji: '📏' },
+        { name: 'Overall Quality', score: Math.round(avgTotal), emoji: '⭐' }
+      ],
+      feedback: overallFeedback
+    };
+  }, [finished, answerAnalyses, messages]);
+
+  // Filter out the overall feedback message (the last AI message when finished)
+  const displayMessages = useMemo(() => {
+    if (!finished) return messages;
+    
+    // Check if the last AI message contains overall feedback keywords
+    const lastAiMessage = [...messages].reverse().find(m => m.sender === "ai");
+    if (lastAiMessage && (
+      lastAiMessage.text?.includes("Thank you for completing") ||
+      lastAiMessage.text?.includes("overall grade") ||
+      lastAiMessage.text?.includes("Average Score") ||
+      lastAiMessage.text?.includes("interview practice session")
+    )) {
+      return messages.filter(m => m.id !== lastAiMessage.id);
+    }
+    return messages;
+  }, [messages, finished]);
 
   const changeEmoji = (state: EmojiState) => {
     setEmojiState(state);
@@ -343,7 +458,8 @@ export default function Chat() {
       // Send to interview API (cast to any to allow string sessionId)
       const response: ChatResponse = await (sendChatMessage as any)(
         conversationHistory,
-        sessionId ?? null
+        sessionId ?? null,
+        selectedLevel || undefined
       );
 
       // Update session ID if provided
@@ -489,7 +605,7 @@ export default function Chat() {
       try {
         setIsTyping(true);
         changeEmoji("thinking");
-        const response: ChatResponse = await sendChatMessage([], null);
+        const response: ChatResponse = await sendChatMessage([], null, selectedLevel || undefined);
 
         if (response.session_id) {
           setSessionId(response.session_id);
@@ -535,6 +651,13 @@ export default function Chat() {
       }
     }
   };
+
+  // Show college/major form if not complete
+  if (checkingCollegeMajor || !collegeMajorComplete) {
+    return (
+      <CollegeMajorForm onComplete={() => setCollegeMajorComplete(true)} />
+    );
+  }
 
   return (
     <div className="h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex flex-col overflow-hidden">
@@ -618,14 +741,31 @@ export default function Chat() {
               </div>
             </div>
 
-            {/* Restart Interview Button - Show when finished */}
+            {/* Action Buttons - Show when finished */}
             {finished && (
-              <button
-                onClick={handleRestartInterview}
-                className="w-full mb-4 sm:mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-medium text-sm sm:text-base min-h-[44px]"
-              >
-                🔄 Restart Interview
-              </button>
+              <div className="w-full space-y-3 mb-4 sm:mb-6">
+                {/* Try Next Level Button */}
+                {selectedLevel && selectedLevel !== "hard" && (
+                  <button
+                    onClick={() => {
+                      const nextLevel = selectedLevel === "easy" ? "medium" : "hard";
+                      navigate(`/chat?level=${nextLevel}`);
+                      // Reload the page to restart with new level
+                      window.location.reload();
+                    }}
+                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-medium text-sm sm:text-base min-h-[44px]"
+                  >
+                    ⬆️ Try Next Level
+                  </button>
+                )}
+                {/* Restart Interview Button */}
+                <button
+                  onClick={handleRestartInterview}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-medium text-sm sm:text-base min-h-[44px]"
+                >
+                  🔄 Restart Interview
+                </button>
+              </div>
             )}
           </div>
 
@@ -643,15 +783,42 @@ export default function Chat() {
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 sm:p-6 text-white">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold truncate">Interview Session</h1>
-                  <p className="text-indigo-100 text-xs sm:text-sm truncate">Software Engineer Position • Technical Round</p>
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold truncate mb-1">Interview Session</h1>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <p className="text-indigo-100 text-xs sm:text-sm truncate">Software Engineer Position • Technical Round</p>
+                    {selectedLevel && (
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg backdrop-blur-sm ${
+                        selectedLevel === "easy" ? "bg-green-500/20 border border-green-300/30" :
+                        selectedLevel === "medium" ? "bg-blue-500/20 border border-blue-300/30" :
+                        "bg-purple-500/20 border border-purple-300/30"
+                      }`}>
+                        <span className="text-sm">
+                          {selectedLevel === "easy" ? "🌱" :
+                           selectedLevel === "medium" ? "🎯" :
+                           "🏆"}
+                        </span>
+                        <span className="text-xs sm:text-sm font-medium text-white">
+                          {selectedLevel === "easy" ? "Easy" :
+                           selectedLevel === "medium" ? "Medium" :
+                           "Hard"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Messages Container */}
             <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 bg-gradient-to-b from-gray-50 to-white">
-              {messages.map((message, index) => (
+              {/* Overall Grade Component - Show when finished */}
+              {finished && overallGradeData && (
+                <div className="mb-6">
+                  <OverallGrade scoreData={overallGradeData} />
+                </div>
+              )}
+
+              {displayMessages.map((message, index) => (
                 <div
                   key={message.id}
                   className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}

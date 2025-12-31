@@ -145,3 +145,4 @@ After setting up, verify:
 - OAuth Redirect: `http://localhost:3000/auth/google/callback`
 - Config: `.env`
 
+

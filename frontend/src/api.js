@@ -54,16 +54,40 @@ export async function getMe() {
   return res.json();
 }
 
-export async function sendChatMessage(messages, sessionId = null) {
+export async function updateUserProfile(updates) {
+  const res = await fetchWithAuth(`${API}/api/v1/users/me/profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+  
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to update profile" }));
+    throw new Error(error.error || "Failed to update profile");
+  }
+  
+  return res.json();
+}
+
+export async function sendChatMessage(messages, sessionId = null, level = null) {
+  const body = {
+    messages,
+    session_id: sessionId
+  };
+  
+  // Add level if provided
+  if (level) {
+    body.level = level;
+  }
+  
   const res = await fetchWithAuth(`${API}/api/v1/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      messages,
-      session_id: sessionId
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
